@@ -1,0 +1,34 @@
+{
+  "name": "fitsyou",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "build": "webpack --config webpack.config.js",
+    "watch": "webpack --config webpack.config.js --watch",
+    "build:prod": "webpack --config webpack.config.js --mode production"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mojtaba-peyrovi/fitsyou.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/mojtaba-peyrovi/fitsyou/issues"
+  },
+  "homepage": "https://github.com/mojtaba-peyrovi/fitsyou#readme",
+  "dependencies": {
+    "preact": "^10.29.2"
+  },
+  "devDependencies": {
+    "@types/chrome": "^0.1.42",
+    "copy-webpack-plugin": "^14.0.0",
+    "ts-loader": "^9.6.0",
+    "typescript": "^6.0.3",
+    "webpack": "^5.107.2",
+    "webpack-cli": "^7.0.3"
+  }
+}

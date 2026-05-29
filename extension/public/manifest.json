@@ -1,0 +1,28 @@
+{
+  "manifest_version": 3,
+  "name": "fitsyou",
+  "version": "1.0.0",
+  "description": "See how clothing looks on you before you buy.",
+  "permissions": ["activeTab", "storage", "scripting"],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "fitsyou"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "*://*.zara.com/*",
+        "*://*.asos.com/*",
+        "*://*.hm.com/*",
+        "*://*.zalando.com/*",
+        "*://*.zalando.de/*",
+        "*://*.zalando.co.uk/*",
+        "*://*.mango.com/*"
+      ],
+      "js": ["content.js"]
+    }
+  ],
+  "background": {
+    "service_worker": "background.js"
+  }
+}
