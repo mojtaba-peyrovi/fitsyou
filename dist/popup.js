@@ -155,9 +155,53 @@ __webpack_require__.r(__webpack_exports__);
 
 
 
+const API_BASE = 'https://fitsyou-web.vercel.app';
 function Popup() {
-    const [status, setStatus] = (0,preact_hooks__WEBPACK_IMPORTED_MODULE_2__.useState)('idle');
+    const [status, setStatus] = (0,preact_hooks__WEBPACK_IMPORTED_MODULE_2__.useState)('checking');
     const [message, setMessage] = (0,preact_hooks__WEBPACK_IMPORTED_MODULE_2__.useState)('');
+    async function checkAuth() {
+        chrome.storage.local.get(['fitsyou_token'], async ({ fitsyou_token }) => {
+            if (!fitsyou_token) {
+                setStatus('signed-out');
+                return;
+            }
+            try {
+                const res = await fetch(`${API_BASE}/api/user/profile`, {
+                    headers: { Authorization: `Bearer ${fitsyou_token}` },
+                });
+                if (res.status === 401) {
+                    chrome.storage.local.remove(['fitsyou_token', 'fitsyou_refresh_token']);
+                    setStatus('signed-out');
+                    return;
+                }
+                const profile = await res.json();
+                if (!profile?.photo_url) {
+                    setStatus('needs-setup');
+                }
+                else {
+                    setStatus('idle');
+                }
+            }
+            catch {
+                setStatus('signed-out');
+            }
+        });
+    }
+    (0,preact_hooks__WEBPACK_IMPORTED_MODULE_2__.useEffect)(() => {
+        checkAuth();
+        const onStorageChange = (changes) => {
+            if ('fitsyou_token' in changes) {
+                checkAuth();
+            }
+        };
+        chrome.storage.onChanged.addListener(onStorageChange);
+        return () => chrome.storage.onChanged.removeListener(onStorageChange);
+    }, []);
+    function openTab(path) {
+        const url = new URL(`${API_BASE}${path}`);
+        url.searchParams.set('extensionId', chrome.runtime.id);
+        chrome.tabs.create({ url: url.toString() });
+    }
     async function handleTryOn() {
         setStatus('loading');
         const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -168,7 +212,6 @@ function Popup() {
         }
         chrome.tabs.sendMessage(tab.id, { type: 'EXTRACT_PRODUCT' }, (response) => {
             if (chrome.runtime.lastError) {
-                // Content script not injected on this page — trigger manual upload
                 setStatus('manual');
                 return;
             }
@@ -188,7 +231,7 @@ function Popup() {
         setStatus('success');
         setMessage('Image uploaded. Try-on coming soon!');
     }
-    return ((0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("div", { style: { padding: '16px' }, children: [(0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("div", { style: { fontWeight: 700, fontSize: '16px', marginBottom: '12px' }, children: "fitsyou" }), status === 'idle' && ((0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("button", { onClick: handleTryOn, style: btnStyle, children: "Try this on" })), status === 'loading' && ((0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("p", { style: { color: '#666', fontSize: '14px' }, children: "Extracting product image\u2026" })), status === 'success' && ((0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("p", { style: { color: '#16a34a', fontSize: '14px' }, children: ["Saved: ", message] })), status === 'error' && ((0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("p", { style: { color: '#dc2626', fontSize: '14px' }, children: message })), status === 'manual' && ((0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("div", { children: [(0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("p", { style: { fontSize: '13px', color: '#555', marginBottom: '10px' }, children: "Can't extract image automatically. Please screenshot the item and upload it." }), (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("input", { type: "file", accept: "image/jpeg,image/png,image/webp", onChange: handleFileUpload, style: { fontSize: '12px', width: '100%' } })] }))] }));
+    return ((0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("div", { style: { padding: '16px', fontFamily: 'sans-serif' }, children: [(0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("div", { style: { fontWeight: 700, fontSize: '16px', marginBottom: '12px' }, children: "fitsyou" }), status === 'checking' && ((0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("p", { style: { color: '#666', fontSize: '14px' }, children: "Loading\u2026" })), status === 'signed-out' && ((0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("div", { children: [(0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("p", { style: { fontSize: '13px', color: '#555', marginBottom: '10px' }, children: "Sign in to start trying on clothes." }), (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("button", { onClick: () => openTab('/auth/extension'), style: btnStyle, children: "Sign in to fitsyou" })] })), status === 'needs-setup' && ((0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("div", { children: [(0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("p", { style: { fontSize: '13px', color: '#555', marginBottom: '10px' }, children: "Complete your profile to start trying on clothes." }), (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("button", { onClick: () => openTab('/onboarding/photo'), style: btnStyle, children: "Complete setup" })] })), status === 'idle' && ((0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("button", { onClick: handleTryOn, style: btnStyle, children: "Try this on" })), status === 'loading' && ((0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("p", { style: { color: '#666', fontSize: '14px' }, children: "Extracting product image\u2026" })), status === 'success' && ((0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("p", { style: { color: '#16a34a', fontSize: '14px' }, children: ["Saved: ", message] })), status === 'error' && ((0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("p", { style: { color: '#dc2626', fontSize: '14px' }, children: message })), status === 'manual' && ((0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("div", { children: [(0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("p", { style: { fontSize: '13px', color: '#555', marginBottom: '10px' }, children: "Can't extract image automatically. Please screenshot the item and upload it." }), (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("input", { type: "file", accept: "image/jpeg,image/png,image/webp", onChange: handleFileUpload, style: { fontSize: '12px', width: '100%' } })] }))] }));
 }
 const btnStyle = {
     width: '100%',

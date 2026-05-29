@@ -24,5 +24,11 @@
   ],
   "background": {
     "service_worker": "background.js"
+  },
+  "externally_connectable": {
+    "matches": [
+      "https://fitsyou-web.vercel.app/*",
+      "http://localhost:3000/*"
+    ]
   }
 }

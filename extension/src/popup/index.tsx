@@ -1,7 +1,9 @@
 import { render } from 'preact';
-import { useState } from 'preact/hooks';
+import { useState, useEffect } from 'preact/hooks';
 
-type Status = 'idle' | 'loading' | 'success' | 'error' | 'manual';
+const API_BASE = 'https://fitsyou-web.vercel.app';
+
+type AuthState = 'checking' | 'signed-out' | 'needs-setup' | 'idle' | 'loading' | 'success' | 'error' | 'manual';
 
 interface ExtractResult {
   success: boolean;
@@ -10,9 +12,63 @@ interface ExtractResult {
   productUrl?: string;
 }
 
+interface Profile {
+  photo_url: string | null;
+  body_type: string | null;
+  backdrop_category: string | null;
+}
+
 function Popup() {
-  const [status, setStatus] = useState<Status>('idle');
+  const [status, setStatus] = useState<AuthState>('checking');
   const [message, setMessage] = useState('');
+
+  async function checkAuth() {
+    chrome.storage.local.get(['fitsyou_token'], async ({ fitsyou_token }) => {
+      if (!fitsyou_token) {
+        setStatus('signed-out');
+        return;
+      }
+
+      try {
+        const res = await fetch(`${API_BASE}/api/user/profile`, {
+          headers: { Authorization: `Bearer ${fitsyou_token}` },
+        });
+
+        if (res.status === 401) {
+          chrome.storage.local.remove(['fitsyou_token', 'fitsyou_refresh_token']);
+          setStatus('signed-out');
+          return;
+        }
+
+        const profile: Profile | null = await res.json();
+        if (!profile?.photo_url) {
+          setStatus('needs-setup');
+        } else {
+          setStatus('idle');
+        }
+      } catch {
+        setStatus('signed-out');
+      }
+    });
+  }
+
+  useEffect(() => {
+    checkAuth();
+
+    const onStorageChange = (changes: { [key: string]: chrome.storage.StorageChange }) => {
+      if ('fitsyou_token' in changes) {
+        checkAuth();
+      }
+    };
+    chrome.storage.onChanged.addListener(onStorageChange);
+    return () => chrome.storage.onChanged.removeListener(onStorageChange);
+  }, []);
+
+  function openTab(path: string) {
+    const url = new URL(`${API_BASE}${path}`);
+    url.searchParams.set('extensionId', chrome.runtime.id);
+    chrome.tabs.create({ url: url.toString() });
+  }
 
   async function handleTryOn() {
     setStatus('loading');
@@ -26,7 +82,6 @@ function Popup() {
 
     chrome.tabs.sendMessage(tab.id, { type: 'EXTRACT_PRODUCT' }, (response: ExtractResult | undefined) => {
       if (chrome.runtime.lastError) {
-        // Content script not injected on this page — trigger manual upload
         setStatus('manual');
         return;
       }
@@ -50,8 +105,34 @@ function Popup() {
   }
 
   return (
-    <div style={{ padding: '16px' }}>
+    <div style={{ padding: '16px', fontFamily: 'sans-serif' }}>
       <div style={{ fontWeight: 700, fontSize: '16px', marginBottom: '12px' }}>fitsyou</div>
+
+      {status === 'checking' && (
+        <p style={{ color: '#666', fontSize: '14px' }}>Loading…</p>
+      )}
+
+      {status === 'signed-out' && (
+        <div>
+          <p style={{ fontSize: '13px', color: '#555', marginBottom: '10px' }}>
+            Sign in to start trying on clothes.
+          </p>
+          <button onClick={() => openTab('/auth/extension')} style={btnStyle}>
+            Sign in to fitsyou
+          </button>
+        </div>
+      )}
+
+      {status === 'needs-setup' && (
+        <div>
+          <p style={{ fontSize: '13px', color: '#555', marginBottom: '10px' }}>
+            Complete your profile to start trying on clothes.
+          </p>
+          <button onClick={() => openTab('/onboarding/photo')} style={btnStyle}>
+            Complete setup
+          </button>
+        </div>
+      )}
 
       {status === 'idle' && (
         <button onClick={handleTryOn} style={btnStyle}>
@@ -64,9 +145,7 @@ function Popup() {
       )}
 
       {status === 'success' && (
-        <p style={{ color: '#16a34a', fontSize: '14px' }}>
-          Saved: {message}
-        </p>
+        <p style={{ color: '#16a34a', fontSize: '14px' }}>Saved: {message}</p>
       )}
 
       {status === 'error' && (

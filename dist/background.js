@@ -4,21 +4,33 @@
   !*** ./extension/src/background/index.ts ***!
   \*******************************************/
 
-chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
-    if (message.type !== 'PRODUCT_EXTRACTED')
-        return;
-    const data = message.data;
-    chrome.tabs.query({ active: true, currentWindow: true }, ([tab]) => {
-        const productUrl = tab?.url ?? data.productUrl;
-        console.log('[fitsyou] Product extracted:', {
-            imageUrl: data.imageUrl,
-            productTitle: data.productTitle,
-            productUrl,
+// Auth token arrives from the web app page (external sender), so it must be
+// handled by onMessageExternal — onMessage only receives internal messages.
+chrome.runtime.onMessageExternal.addListener((message, _sender, sendResponse) => {
+    if (message.type === 'AUTH_TOKEN') {
+        chrome.storage.local.set({
+            fitsyou_token: message.token,
+            fitsyou_refresh_token: message.refreshToken,
+        }, () => {
+            sendResponse({ ok: true });
         });
-        // TODO (Week 3): POST to fitsyou backend API
-        sendResponse({ ok: true });
-    });
-    return true; // keep message channel open for async response
+        return true;
+    }
+});
+chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+    if (message.type === 'PRODUCT_EXTRACTED') {
+        chrome.tabs.query({ active: true, currentWindow: true }, ([tab]) => {
+            const productUrl = tab?.url ?? message.data.productUrl;
+            console.log('[fitsyou] Product extracted:', {
+                imageUrl: message.data.imageUrl,
+                productTitle: message.data.productTitle,
+                productUrl,
+            });
+            // TODO (Week 4): POST to /api/generate
+            sendResponse({ ok: true });
+        });
+        return true;
+    }
 });
 
 /******/ })()
