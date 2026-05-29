@@ -53,7 +53,11 @@ async function callGenerate(
     body: JSON.stringify(payload),
   });
   const json = await res.json().catch(() => ({ error: 'Generation failed' }));
-  if (!res.ok) return { error: (json as { error?: string }).error ?? `Error ${res.status}` };
+  if (!res.ok) {
+    const j = json as { error?: string; detail?: string };
+    const msg = j.detail ? `${j.error}: ${j.detail}` : (j.error ?? `Error ${res.status}`);
+    return { error: msg };
+  }
   return json as { output_image_urls: string[] };
 }
 
