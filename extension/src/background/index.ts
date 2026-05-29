@@ -31,18 +31,8 @@ chrome.runtime.onMessageExternal.addListener((message: AuthTokenMessage, _sender
   }
 });
 
-chrome.runtime.onMessage.addListener((message: IncomingMessage, _sender, sendResponse) => {
-  if (message.type === 'PRODUCT_EXTRACTED') {
-    chrome.tabs.query({ active: true, currentWindow: true }, ([tab]: chrome.tabs.Tab[]) => {
-      const productUrl = tab?.url ?? message.data.productUrl;
-      console.log('[fitsyou] Product extracted:', {
-        imageUrl: message.data.imageUrl,
-        productTitle: message.data.productTitle,
-        productUrl,
-      });
-      // TODO (Week 4): POST to /api/generate
-      sendResponse({ ok: true });
-    });
-    return true;
-  }
+// PRODUCT_EXTRACTED is now handled directly in the popup (see popup/index.tsx).
+// Background only needs to receive and store the auth token from the web app.
+chrome.runtime.onMessage.addListener((_message: IncomingMessage, _sender, _sendResponse) => {
+  // reserved for future use
 });

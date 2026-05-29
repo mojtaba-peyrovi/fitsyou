@@ -156,11 +156,35 @@ __webpack_require__.r(__webpack_exports__);
 
 
 const API_BASE = 'https://fitsyou-web.vercel.app';
+function storeName(url) {
+    try {
+        return new URL(url).hostname.replace(/^www\./, '').split('.')[0];
+    }
+    catch {
+        return '';
+    }
+}
+async function callGenerate(token, payload) {
+    const res = await fetch(`${API_BASE}/api/generate`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(payload),
+    });
+    const json = await res.json().catch(() => ({ error: 'Generation failed' }));
+    if (!res.ok)
+        return { error: json.error ?? `Error ${res.status}` };
+    return json;
+}
 function Popup() {
     const [status, setStatus] = (0,preact_hooks__WEBPACK_IMPORTED_MODULE_2__.useState)('checking');
     const [message, setMessage] = (0,preact_hooks__WEBPACK_IMPORTED_MODULE_2__.useState)('');
+    const [currentTabUrl, setCurrentTabUrl] = (0,preact_hooks__WEBPACK_IMPORTED_MODULE_2__.useState)('');
     async function checkAuth() {
-        chrome.storage.local.get(['fitsyou_token'], async ({ fitsyou_token }) => {
+        chrome.storage.local.get(['fitsyou_token'], async (items) => {
+            const fitsyou_token = items['fitsyou_token'];
             if (!fitsyou_token) {
                 setStatus('signed-out');
                 return;
@@ -190,9 +214,8 @@ function Popup() {
     (0,preact_hooks__WEBPACK_IMPORTED_MODULE_2__.useEffect)(() => {
         checkAuth();
         const onStorageChange = (changes) => {
-            if ('fitsyou_token' in changes) {
+            if ('fitsyou_token' in changes)
                 checkAuth();
-            }
         };
         chrome.storage.onChanged.addListener(onStorageChange);
         return () => chrome.storage.onChanged.removeListener(onStorageChange);
@@ -203,35 +226,97 @@ function Popup() {
         chrome.tabs.create({ url: url.toString() });
     }
     async function handleTryOn() {
-        setStatus('loading');
+        setStatus('extracting');
         const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
         if (!tab.id) {
             setStatus('error');
             setMessage('Could not access current tab.');
             return;
         }
-        chrome.tabs.sendMessage(tab.id, { type: 'EXTRACT_PRODUCT' }, (response) => {
-            if (chrome.runtime.lastError) {
+        const tabUrl = tab.url ?? '';
+        setCurrentTabUrl(tabUrl);
+        chrome.tabs.sendMessage(tab.id, { type: 'EXTRACT_PRODUCT' }, async (response) => {
+            if (chrome.runtime.lastError || !response?.success || !response.imageUrl) {
                 setStatus('manual');
                 return;
             }
-            if (!response || !response.success) {
-                setStatus('manual');
-                return;
-            }
-            chrome.runtime.sendMessage({ type: 'PRODUCT_EXTRACTED', data: response });
-            setStatus('success');
-            setMessage(response.productTitle ?? 'Item saved!');
+            setStatus('generating');
+            chrome.storage.local.get(['fitsyou_token'], async (items) => {
+                const fitsyou_token = items['fitsyou_token'];
+                if (!fitsyou_token) {
+                    setStatus('signed-out');
+                    return;
+                }
+                const result = await callGenerate(fitsyou_token, {
+                    product_url: tabUrl,
+                    product_image_url: response.imageUrl,
+                    product_title: response.productTitle ?? null,
+                    store_name: storeName(tabUrl),
+                });
+                if ('error' in result) {
+                    if (result.error.includes('limit')) {
+                        setStatus('error');
+                        setMessage('Monthly limit reached. Upgrade your plan.');
+                    }
+                    else {
+                        setStatus('error');
+                        setMessage(result.error);
+                    }
+                    return;
+                }
+                setStatus('success');
+                setMessage(response.productTitle ?? 'Try-on ready!');
+            });
         });
     }
-    function handleFileUpload(e) {
+    async function handleFileUpload(e) {
         const file = e.target.files?.[0];
         if (!file)
             return;
-        setStatus('success');
-        setMessage('Image uploaded. Try-on coming soon!');
+        setStatus('generating');
+        chrome.storage.local.get(['fitsyou_token'], async (items) => {
+            const fitsyou_token = items['fitsyou_token'];
+            if (!fitsyou_token) {
+                setStatus('signed-out');
+                return;
+            }
+            // Upload the product screenshot to R2 first
+            const formData = new FormData();
+            formData.append('file', file);
+            let productImageUrl;
+            try {
+                const uploadRes = await fetch(`${API_BASE}/api/upload-product-image`, {
+                    method: 'POST',
+                    headers: { Authorization: `Bearer ${fitsyou_token}` },
+                    body: formData,
+                });
+                if (!uploadRes.ok)
+                    throw new Error('Upload failed');
+                const uploadData = await uploadRes.json();
+                productImageUrl = uploadData.url;
+            }
+            catch {
+                setStatus('error');
+                setMessage('Failed to upload product image.');
+                return;
+            }
+            // Then generate
+            const productUrl = currentTabUrl || `manual-upload-${Date.now()}`;
+            const result = await callGenerate(fitsyou_token, {
+                product_url: productUrl,
+                product_image_url: productImageUrl,
+                store_name: currentTabUrl ? storeName(currentTabUrl) : undefined,
+            });
+            if ('error' in result) {
+                setStatus('error');
+                setMessage(result.error);
+                return;
+            }
+            setStatus('success');
+            setMessage('Try-on ready!');
+        });
     }
-    return ((0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("div", { style: { padding: '16px', fontFamily: 'sans-serif' }, children: [(0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("div", { style: { fontWeight: 700, fontSize: '16px', marginBottom: '12px' }, children: "fitsyou" }), status === 'checking' && ((0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("p", { style: { color: '#666', fontSize: '14px' }, children: "Loading\u2026" })), status === 'signed-out' && ((0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("div", { children: [(0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("p", { style: { fontSize: '13px', color: '#555', marginBottom: '10px' }, children: "Sign in to start trying on clothes." }), (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("button", { onClick: () => openTab('/auth/extension'), style: btnStyle, children: "Sign in to fitsyou" })] })), status === 'needs-setup' && ((0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("div", { children: [(0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("p", { style: { fontSize: '13px', color: '#555', marginBottom: '10px' }, children: "Complete your profile to start trying on clothes." }), (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("button", { onClick: () => openTab('/onboarding/photo'), style: btnStyle, children: "Complete setup" })] })), status === 'idle' && ((0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("button", { onClick: handleTryOn, style: btnStyle, children: "Try this on" })), status === 'loading' && ((0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("p", { style: { color: '#666', fontSize: '14px' }, children: "Extracting product image\u2026" })), status === 'success' && ((0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("p", { style: { color: '#16a34a', fontSize: '14px' }, children: ["Saved: ", message] })), status === 'error' && ((0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("p", { style: { color: '#dc2626', fontSize: '14px' }, children: message })), status === 'manual' && ((0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("div", { children: [(0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("p", { style: { fontSize: '13px', color: '#555', marginBottom: '10px' }, children: "Can't extract image automatically. Please screenshot the item and upload it." }), (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("input", { type: "file", accept: "image/jpeg,image/png,image/webp", onChange: handleFileUpload, style: { fontSize: '12px', width: '100%' } })] }))] }));
+    return ((0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("div", { style: { padding: '16px', fontFamily: 'sans-serif' }, children: [(0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("div", { style: { fontWeight: 700, fontSize: '16px', marginBottom: '12px' }, children: "fitsyou" }), status === 'checking' && (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("p", { style: hintStyle, children: "Loading\u2026" }), status === 'signed-out' && ((0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("div", { children: [(0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("p", { style: hintStyle, children: "Sign in to start trying on clothes." }), (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("button", { onClick: () => openTab('/auth/extension'), style: btnStyle, children: "Sign in to fitsyou" })] })), status === 'needs-setup' && ((0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("div", { children: [(0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("p", { style: hintStyle, children: "Complete your profile to start trying on clothes." }), (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("button", { onClick: () => openTab('/onboarding/photo'), style: btnStyle, children: "Complete setup" })] })), status === 'idle' && ((0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("button", { onClick: handleTryOn, style: btnStyle, children: "Try this on" })), status === 'extracting' && (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("p", { style: hintStyle, children: "Finding product image\u2026" }), status === 'generating' && ((0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("p", { style: hintStyle, children: "Generating your try-on\u2026 this takes ~15 sec." })), status === 'success' && ((0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("div", { children: [(0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("p", { style: { color: '#16a34a', fontSize: '14px', marginBottom: '10px' }, children: ["\u2713 ", message] }), (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("button", { onClick: () => openTab('/dashboard'), style: btnStyle, children: "View your try-ons" })] })), status === 'error' && ((0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("div", { children: [(0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("p", { style: { color: '#dc2626', fontSize: '13px', marginBottom: '10px' }, children: message }), (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("button", { onClick: () => setStatus('idle'), style: { ...btnStyle, background: '#555' }, children: "Try again" })] })), status === 'manual' && ((0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("div", { children: [(0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("p", { style: hintStyle, children: "Can't auto-detect product image. Take a screenshot of the item and upload it below. Your profile photo is already saved \u2014 this is just the product." }), (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("input", { type: "file", accept: "image/jpeg,image/png,image/webp", onChange: handleFileUpload, style: { fontSize: '12px', width: '100%' } })] }))] }));
 }
 const btnStyle = {
     width: '100%',
@@ -243,6 +328,11 @@ const btnStyle = {
     fontSize: '14px',
     fontWeight: 600,
     cursor: 'pointer',
+};
+const hintStyle = {
+    color: '#666',
+    fontSize: '13px',
+    marginBottom: '10px',
 };
 (0,preact__WEBPACK_IMPORTED_MODULE_1__.render)((0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)(Popup, {}), document.getElementById('app'));
 
