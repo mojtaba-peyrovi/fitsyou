@@ -158,56 +158,144 @@ File input accepts: jpg, png, webp.
 
 ---
 
-### Wk 3 · Generation Pipeline ⬜ Not Started
+### Wk 3 · Infrastructure + Auth ⬜ Not Started
 
 | Task | Effort | Status |
 |---|---|---|
-| Wire composition API — user photo + product image → 2–3 variants | Large | ⬜ Not Started |
+| Scaffold Next.js app + deploy to Vercel | Small | ⬜ Not Started |
+| Supabase Auth + extension login flow | Medium | ⬜ Not Started |
+| Postgres schema + RLS (profiles + try_ons tables) | Medium | ⬜ Not Started |
+| Cloudflare R2 bucket setup + upload helper (lib/r2.ts) | Small | ⬜ Not Started |
+| Minimal onboarding flow (photo + body type + backdrop) | Medium | ⬜ Not Started |
+| API routes — /api/user/photo + /api/user/profile | Small | ⬜ Not Started |
+| Extension auth state + popup UI (sign in / setup / ready states) | Medium | ⬜ Not Started |
+
+#### Detail
+
+**Scaffold Next.js app + deploy to Vercel**
+- Next.js 14, App Router, TypeScript. Deploy to Vercel immediately — extension will call this host
+- Placeholder `/` route with "fitsyou" in title
+- Set up env vars: `OPENAI_API_KEY`, `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SECRET_KEY`, `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_R2_ACCESS_KEY_ID`, `CLOUDFLARE_R2_SECRET_ACCESS_KEY`, `CLOUDFLARE_R2_BUCKET_NAME`, `CLOUDFLARE_R2_PUBLIC_URL`, `CLOUDFLARE_R2_ENDPOINT`
+
+**Supabase Auth + extension login flow**
+- Supabase Auth, Google OAuth only — one provider, fewer edge cases
+- Session handling via `@supabase/ssr`
+- `/auth/extension` route: extension popup opens it in a new tab, triggers Google login, redirects back and passes session token to extension via `chrome.runtime.sendMessage`
+- Extension stores token in `chrome.storage.local`, attaches as `Bearer` on all API calls
+
+**Postgres schema (Supabase)**
+```sql
+create table public.profiles (
+  id uuid references auth.users(id) on delete cascade primary key,
+  photo_url text,
+  body_type text,           -- 'petite' | 'slim' | 'average' | 'curvy' | 'plus'
+  backdrop_category text,   -- 'city' | 'cafe' | 'nature' | 'studio' | 'evening'
+  try_on_count_this_month int default 0,
+  subscription_tier text default 'free',
+  created_at timestamptz default now()
+);
+
+create table public.try_ons (
+  id uuid default gen_random_uuid() primary key,
+  user_id uuid references public.profiles(id) on delete cascade,
+  product_url text not null,
+  product_title text,
+  store_name text,
+  product_image_url text,
+  output_image_urls text[],
+  backdrop_used text,
+  created_at timestamptz default now(),
+  expires_at timestamptz
+);
+
+create index try_ons_cache_idx on public.try_ons(user_id, product_url);
+```
+RLS: users can only read/write their own rows on both tables.
+
+**Cloudflare R2 bucket setup + lib/r2.ts**
+- Bucket: `fitsyou-outputs`. Folders by convention: `user-photos/` and `try-ons/`
+- Enable public access — images must be displayable in extension popup and web profile
+- API token with Object Read & Write. CORS rule: allow `chrome-extension://*` and Vercel domain
+- Shared helper at `lib/r2.ts` using `@aws-sdk/client-s3`
+
+**Minimal onboarding flow**
+- Screen 1 `/onboarding/photo`: file input, resize to max 1024px with `sharp`, upload to R2 as `user-photos/{user_id}.jpg`, save URL to `profiles.photo_url`
+- Screen 2 `/onboarding/body-type`: 5 buttons (Petite / Slim / Average / Curvy / Plus)
+- Screen 3 `/onboarding/backdrop`: 5 buttons (City street / Café / Nature / Studio / Evening out)
+- Route guard: authenticated users with no `photo_url` redirect to `/onboarding/photo`
+
+**API routes**
+- `POST /api/user/photo` — multipart, resize + R2 upload, update `profiles.photo_url`
+- `POST /api/user/profile` — update `body_type` + `backdrop_category`
+- `GET /api/user/profile` — returns full profile row (extension calls this on popup open to check onboarding state)
+
+**Extension auth state + popup UI**
+- On popup open: call `GET /api/user/profile`
+- If 401 → "Sign in to fitsyou" button opens `/auth/extension` in new tab
+- If no `photo_url` → "Complete setup" button opens `/onboarding/photo`
+- If profile complete → disabled "Try it on" button with "Setup required" label (wired in Wk 4)
+
+**File structure to create:**
+```
+fitsyou-web/
+├── app/
+│   ├── layout.tsx
+│   ├── page.tsx
+│   ├── dashboard/page.tsx
+│   ├── onboarding/
+│   │   ├── photo/page.tsx
+│   │   ├── body-type/page.tsx
+│   │   └── backdrop/page.tsx
+│   ├── auth/
+│   │   ├── callback/route.ts
+│   │   └── extension/page.tsx
+│   └── api/
+│       └── user/
+│           ├── photo/route.ts
+│           └── profile/route.ts
+├── lib/
+│   ├── supabase/
+│   │   ├── client.ts
+│   │   ├── server.ts
+│   │   └── middleware.ts
+│   └── r2.ts
+├── middleware.ts
+└── .env.local
+```
+
+---
+
+### Wk 4 · Generation Pipeline + Web Profile ⬜ Not Started
+
+| Task | Effort | Status |
+|---|---|---|
+| Build saved try-on library grid + one-click buy links | Medium | ⬜ Not Started |
+| Wire composition API — photo + product image → 2–3 variants | Large | ⬜ Not Started |
 | Build backdrop system (5 categories, random rotation) | Medium | ⬜ Not Started |
 | Cache generation results + free/paid resolution split | Small | ⬜ Not Started |
 
 #### Detail
 
-**Composition API (`extension/src/background/index.ts` + new backend route)**
-- User photo + scraped product image → GPT Image 1.5 (`gpt-image-1.5`, medium quality, 1024×1024) → 2–3 outfit composition variants
-- Store outputs in Cloudflare R2
+**Try-on library grid**
+- Grid of saved try-ons. Each card: image, product title, store name, product link, date saved
+- One-click buy-through. Minimal design — clean, not polished
+
+**Composition API (`/api/generate`)**
+- Now unblocked by Wk 3 infrastructure
+- User photo (from `profiles.photo_url`) + scraped product image → `gpt-image-1.5` (medium quality, 1024×1024) → 2–3 outfit composition variants
+- Store outputs in R2 under `try-ons/{user_id}/`
 - Single stateless API call — no orchestration, no LLM loop
+- Cache lookup first: if `(user_id, product_url)` exists in `try_ons` table, return cached result
 
 **Backdrop system**
 - 5 categories: city street, café, nature, studio, evening
-- User picks 1–2 at onboarding
+- User picks 1–2 at onboarding (saved in Wk 3)
 - System rotates randomly within chosen category per generation so repeat try-ons feel different
 
 **Caching**
 - Cache key: `(user_id, product_url)`
 - If user tries same item twice, serve cached result
 - Free tier → low-res; paid tier → full-res
-
----
-
-### Wk 4 · Web Profile + Auth ⬜ Not Started
-
-| Task | Effort | Status |
-|---|---|---|
-| Scaffold Next.js app + landing page on Vercel | Small | ⬜ Not Started |
-| Auth + Postgres schema + R2 image storage | Medium | ⬜ Not Started |
-| Build saved try-on library grid + one-click buy links | Medium | ⬜ Not Started |
-| Build minimal onboarding + account settings | Small | ⬜ Not Started |
-
-#### Detail
-
-**Postgres schema (Supabase)**
-```sql
-users          (id, photo_url, body_type, backdrop_pref, created_at)
-try_ons        (id, user_id, product_url, product_title, image_urls[], created_at)
-subscriptions  (id, user_id, tier, paddle_subscription_id, status)
-```
-
-**Landing page:** clear one-line pitch, extension install CTA, example try-on image. Minimal — must not kill conversion.
-
-**Try-on library:** grid of saved try-ons. Each card: image, product title, store name, product link, date saved. One-click buy. Clean, not polished.
-
-**Onboarding:** one face photo upload, body type selector, backdrop category (1–2 picks). Must not kill conversion.
 
 ---
 
@@ -287,9 +375,8 @@ PADDLE_WEBHOOK_SECRET=
 
 | Feature | Week |
 |---|---|
-| GPT Image 1 API call | Wk 3 |
-| Web profile / fitsyou.live | Wk 4 |
-| Auth / database schema | Wk 4 |
+| GPT Image 1.5 API call (/api/generate) | Wk 4 |
+| Try-on library grid / web profile | Wk 4 |
 | Paddle billing | Wk 5 |
 | Playwright server-side worker | Post-launch |
 
