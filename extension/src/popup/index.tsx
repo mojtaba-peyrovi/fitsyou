@@ -127,7 +127,17 @@ function Popup() {
     setCurrentTabUrl(tabUrl);
 
     chrome.tabs.sendMessage(tab.id, { type: 'EXTRACT_PRODUCT' }, async (response: ExtractResult | undefined) => {
-      if (chrome.runtime.lastError || !response?.success || !response.imageUrl) {
+      // Content script not reachable: either a stale tab (opened before the
+      // extension was reloaded) or a site we don't inject into. Tell the user
+      // to refresh rather than dumping them into manual upload.
+      if (chrome.runtime.lastError || !response) {
+        setStatus('error');
+        setMessage('Refresh this page, then click "Try this on" again. (If it keeps failing, this store may not be supported yet — use manual upload.)');
+        return;
+      }
+
+      // Content script responded but found no product image → manual upload.
+      if (!response.success || !response.imageUrl) {
         setStatus('manual');
         return;
       }
