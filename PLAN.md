@@ -158,24 +158,24 @@ File input accepts: jpg, png, webp.
 
 ---
 
-### Wk 3 · Infrastructure + Auth ⬜ Not Started
+### Wk 3 · Infrastructure + Auth ✅ Complete
 
 | Task | Effort | Status |
 |---|---|---|
-| Scaffold Next.js app + deploy to Vercel | Small | ⬜ Not Started |
-| Supabase Auth + extension login flow | Medium | ⬜ Not Started |
-| Postgres schema + RLS (profiles + try_ons tables) | Medium | ⬜ Not Started |
-| Cloudflare R2 bucket setup + upload helper (lib/r2.ts) | Small | ⬜ Not Started |
-| Minimal onboarding flow (photo + body type + backdrop) | Medium | ⬜ Not Started |
-| API routes — /api/user/photo + /api/user/profile | Small | ⬜ Not Started |
-| Extension auth state + popup UI (sign in / setup / ready states) | Medium | ⬜ Not Started |
+| Scaffold Next.js app + deploy to Vercel | Small | ✅ Done |
+| Supabase Auth + extension login flow | Medium | ✅ Done |
+| Postgres schema + RLS (profiles + try_ons tables) | Medium | ✅ Done |
+| Cloudflare R2 bucket setup + upload helper (lib/r2.ts) | Small | ✅ Done |
+| Minimal onboarding flow (photo + body type + backdrop) | Medium | ✅ Done |
+| API routes — /api/user/photo + /api/user/profile | Small | ✅ Done |
+| Extension auth state + popup UI (sign in / setup / ready states) | Medium | ✅ Done |
 
 #### Detail
 
 **Scaffold Next.js app + deploy to Vercel**
 - Next.js 14, App Router, TypeScript. Deploy to Vercel immediately — extension will call this host
 - Placeholder `/` route with "fitsyou" in title
-- Set up env vars: `OPENAI_API_KEY`, `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SECRET_KEY`, `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_R2_ACCESS_KEY_ID`, `CLOUDFLARE_R2_SECRET_ACCESS_KEY`, `CLOUDFLARE_R2_BUCKET_NAME`, `CLOUDFLARE_R2_PUBLIC_URL`, `CLOUDFLARE_R2_ENDPOINT`
+- Set up env vars: `OPENAI_API_KEY`, `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SECRET_KEY`, `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_R2_ACCESS_KEY_ID`, `CLOUDFLARE_R2_SECRET_ACCESS_KEY`, `CLOUDFLARE_R2_BUCKET_NAME`, `CLOUDFLARE_R2_PUBLIC_URL`, `CLOUDFLARE_R2_ENDPOINT`
 
 **Supabase Auth + extension login flow**
 - Supabase Auth, Google OAuth only — one provider, fewer edge cases
@@ -265,7 +265,7 @@ fitsyou-web/
 
 ---
 
-### Wk 4 · Generation Pipeline + Web Profile ⬜ Not Started
+### Wk 4 · Generation Pipeline + Web Profile 🔄 Up Next
 
 | Task | Effort | Status |
 |---|---|---|
@@ -349,8 +349,8 @@ Key metric: **cost per activated user** (install + profile + ≥1 try-on).
 OPENAI_API_KEY=
 
 # Supabase
-SUPABASE_URL=https://nzchqlmkquwqzsqdlidn.supabase.co
-SUPABASE_PUBLISHABLE_KEY=
+NEXT_PUBLIC_SUPABASE_URL=https://nzchqlmkquwqzsqdlidn.supabase.co
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=
 SUPABASE_SECRET_KEY=
 
 # Cloudflare R2
@@ -382,4 +382,4 @@ PADDLE_WEBHOOK_SECRET=
 
 ---
 
-*Last updated: 2026-05-29 — synced with Monday.com board fitsyou.live — v1 Build Plan*
+*Last updated: 2026-05-29 — Wk 3 complete. Wk 4 (generation pipeline) is next.*
