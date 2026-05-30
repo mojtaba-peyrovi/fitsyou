@@ -338,7 +338,9 @@ fitsyou-web/
 - Collects the **core-5 measurements** (height, weight, chest, waist, hips) via a new **skippable** onboarding step `/onboarding/measurements` (flow is now photo → measurements → face → backdrop) and editable fields in the dashboard `ProfilePanel`. Stored as metric ints on `profiles`; the 5 fields were added to `POST /api/user/profile`.
 - ✅ `lib/fit-assessment.ts` — `assessFit()` calls `gpt-4o-mini` (JSON mode) to normalize messy chart text (cm/inch, S/M/L/numeric) and judge fit; `POST /api/fit` reads the user's measurements and returns `{ verdict, recommended_size, reason }`. **No try-on credit consumed.** **Fails open to `unknown`** on missing key/error, missing measurements (`needs_measurements: true`), or no chart found.
 - Extension content script scrapes the size-chart text + available/selected sizes (per-site + generic + hidden-modal selectors, scored to pick the real table); popup calls `/api/fit` in parallel with generation and never blocks the try-on if it fails.
-- ⚠️ Requires the `profiles` measurement-column migration in `DEVELOPMENT.md` to be run in Supabase. Chart scraping is best-effort — size guides behind un-clicked modals degrade gracefully to "Fit unknown".
+- **Unit system:** users pick metric (cm/kg) or imperial (in/lb) in onboarding + dashboard (`unit_system` on `profiles`). Measurements are always stored as metric ints and the comparison always runs in cm — `lib/units.ts` converts only at the UI boundary, so switching units never corrupts stored data or the verdict.
+- **Credit guard:** on a `poor` verdict the popup pauses and asks "try it on anyway?" before calling `/api/generate`, so a clearly-bad match doesn't auto-spend a credit (good/borderline/unknown still generate immediately).
+- ⚠️ Requires the `profiles` measurement-column + `unit_system` migration in `DEVELOPMENT.md` to be run in Supabase. Chart scraping is best-effort — size guides behind un-clicked modals degrade gracefully to "Fit unknown".
 
 ---
 
