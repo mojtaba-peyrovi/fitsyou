@@ -46,7 +46,7 @@ fitsyou is a lightweight Chrome extension + web profile that lets users see how 
 3. User browses any fashion store as normal
 4. They see an item they like → click the fitsyou extension icon
 5. Extension extracts the product image from the page
-6. Sends user photo + product image → GPT Image 1 API → 2–3 try-on variants generated
+6. Sends user photo + product image → GPT Image 1.5 API → 2–3 try-on variants generated
 7. Try-on images + product link saved automatically to user's fitsyou profile at fitsyou.live
 8. User revisits saved try-ons anytime and clicks through to buy
 
@@ -114,7 +114,7 @@ File input accepts: jpg, png, webp.
 | Calculate cost per generation — confirm €0.02 target is viable | Medium | ✅ Done |
 | Pick winning API + lock stack, provision all accounts | Small | ✅ Done |
 
-**Outcome:** GPT Image 1 selected. Stack locked. All accounts provisioned before Wk 2.
+**Outcome:** GPT Image 1.5 selected. Stack locked. All accounts provisioned before Wk 2.
 
 ---
 
