@@ -152,6 +152,97 @@ function extractSizeChart() {
         return best.text.slice(0, MAX_CHART_LEN);
     return undefined;
 }
+// ── Size-guide trigger (button/link that opens the chart modal) ───────────────
+// Most retailers hide the size guide behind a "Size guide" button; the chart is
+// not in the DOM until it's clicked. We find and click that trigger, wait for
+// the chart to render, then scrape it (see resolveSizeChart).
+// Per-site trigger selectors tried first. Kept loose because class names are
+// obfuscated; the generic text scan below is the real workhorse.
+const SIZE_GUIDE_TRIGGER_SELECTORS = {
+    'zara.com': ['[data-qa-action*="size-guide"]', 'button[class*="size-guide"]'],
+    'asos.com': ['button[aria-label*="size guide" i]', 'a[href*="sizeguide" i]', '[id*="sizeguide" i] button'],
+    'hm.com': ['button[class*="sizeGuide" i]', '[data-testid*="size-guide"]'],
+    'zalando.com': ['[data-testid*="size-guide"]', 'button[class*="size-flow" i]'],
+    'zalando.de': ['[data-testid*="size-guide"]', 'button[class*="size-flow" i]'],
+    'zalando.co.uk': ['[data-testid*="size-guide"]', 'button[class*="size-flow" i]'],
+    'mango.com': ['[data-testid*="size-guide"]', 'button[class*="size-guide" i]'],
+};
+// Visible label of a clickable element that opens a size guide.
+const TRIGGER_TEXT = /\b(size guide|size chart|size & fit|size and fit|measurements?|size info|fit guide|size help)\b/i;
+function isClickable(el) {
+    const rect = el.getBoundingClientRect();
+    return rect.width > 0 && rect.height > 0;
+}
+function findSizeGuideTrigger() {
+    const hostname = location.hostname.replace(/^www\./, '');
+    const siteName = Object.keys(SIZE_GUIDE_TRIGGER_SELECTORS).find((k) => hostname.includes(k));
+    for (const selector of siteName ? SIZE_GUIDE_TRIGGER_SELECTORS[siteName] : []) {
+        let el = null;
+        try {
+            el = document.querySelector(selector);
+        }
+        catch {
+            continue;
+        }
+        if (el && isClickable(el))
+            return el;
+    }
+    // Generic: scan clickable elements for a size-guide label.
+    for (const el of Array.from(document.querySelectorAll('button, a, [role="button"]'))) {
+        const label = (el.innerText || el.textContent || '').trim();
+        const aria = el.getAttribute('aria-label') ?? '';
+        if (label.length > 40 && aria.length > 40)
+            continue; // skip large containers
+        if ((TRIGGER_TEXT.test(label) || TRIGGER_TEXT.test(aria)) && isClickable(el)) {
+            return el;
+        }
+    }
+    return null;
+}
+// Poll (MutationObserver + interval) for the chart to render after a click.
+function waitForSizeChart(timeoutMs) {
+    return new Promise((resolve) => {
+        let done = false;
+        const finish = (val) => {
+            if (done)
+                return;
+            done = true;
+            observer.disconnect();
+            clearInterval(interval);
+            clearTimeout(timer);
+            resolve(val);
+        };
+        const tryExtract = () => {
+            const chart = extractSizeChart();
+            if (chart)
+                finish(chart);
+        };
+        const observer = new MutationObserver(tryExtract);
+        observer.observe(document.documentElement, { childList: true, subtree: true });
+        const interval = setInterval(tryExtract, 250);
+        const timer = setTimeout(() => finish(undefined), timeoutMs);
+        tryExtract();
+    });
+}
+// Best-effort: close the modal we opened so the user's page isn't disrupted.
+function closeSizeGuide() {
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    const scopedClose = document.querySelector('[role="dialog"] [aria-label*="close" i], [class*="modal" i] [aria-label*="close" i], [class*="modal" i] button[class*="close" i]');
+    scopedClose?.click();
+}
+// Get the chart text: inline if present, otherwise click the trigger and wait.
+async function resolveSizeChart() {
+    const inline = extractSizeChart();
+    if (inline)
+        return inline;
+    const trigger = findSizeGuideTrigger();
+    if (!trigger)
+        return undefined; // Part 2 (Playwright fallback) handles these
+    trigger.click();
+    const chart = await waitForSizeChart(3000);
+    closeSizeGuide();
+    return chart;
+}
 function extractSizes() {
     const SIZE_SELECTORS = [
         '[class*="size-selector"] button',
@@ -268,21 +359,28 @@ function extractProductTitle() {
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     if (message.type !== 'EXTRACT_PRODUCT')
         return;
-    const imageUrl = extractProductImage();
-    if (!imageUrl) {
-        sendResponse({ success: false });
-        return;
-    }
-    const { availableSizes, selectedSize } = extractSizes();
-    sendResponse({
-        success: true,
-        imageUrl,
-        productTitle: extractProductTitle(),
-        productUrl: location.href,
-        sizeChartText: extractSizeChart(),
-        availableSizes,
-        selectedSize,
-    });
+    // Async: resolveSizeChart may click a "Size guide" button and wait for the
+    // modal to render. Returning true keeps the message channel open until we
+    // call sendResponse.
+    (async () => {
+        const imageUrl = extractProductImage();
+        if (!imageUrl) {
+            sendResponse({ success: false });
+            return;
+        }
+        const { availableSizes, selectedSize } = extractSizes();
+        const sizeChartText = await resolveSizeChart();
+        sendResponse({
+            success: true,
+            imageUrl,
+            productTitle: extractProductTitle(),
+            productUrl: location.href,
+            sizeChartText,
+            availableSizes,
+            selectedSize,
+        });
+    })();
+    return true;
 });
 
 /******/ })()
