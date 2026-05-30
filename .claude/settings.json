@@ -1,0 +1,49 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__claude_ai_monday_com__change_item_column_values",
+      "Read(//c/Users/mojta/personal_projects/fitsyou-web-app/app/api/user/profile/**)",
+      "Read(//c/Users/mojta/personal_projects/fitsyou-web-app/app/api/user/photo/**)",
+      "Read(//c/Users/mojta/personal_projects/fitsyou-web-app/app/api/image/**)",
+      "Bash(rm \"c:\\\\Users\\\\mojta\\\\personal_projects\\\\fitsyou-web-app\\\\app\\\\onboarding\\\\body-type\\\\page.tsx\")",
+      "Bash(rmdir \"c:\\\\Users\\\\mojta\\\\personal_projects\\\\fitsyou-web-app\\\\app\\\\onboarding\\\\body-type\")",
+      "Read(//c/Users/mojta/personal_projects/fitsyou-web-app/app/onboarding/**)",
+      "Bash(cd \"c:\\\\Users\\\\mojta\\\\personal_projects\\\\fitsyou-web-app\"; cat package.json | grep -A8 '\"scripts\"')",
+      "Read(//c/Users/mojta/personal_projects/fitsyou-web-app/**)",
+      "Bash(echo \"EXIT: $?\")",
+      "Bash(git -C \"c:\\\\Users\\\\mojta\\\\personal_projects\\\\fitsyou\" status --short)",
+      "Bash(git -C \"c:\\\\Users\\\\mojta\\\\personal_projects\\\\fitsyou-web-app\" status --short)",
+      "Bash(git config *)",
+      "Bash(python -c \"import sys; d=sys.stdin.buffer.read\\(\\); print\\('bytes:', len\\(d\\)\\); print\\('lines:', d.count\\(b'\\\\n'\\)\\)\")",
+      "Bash(python -c ' *)",
+      "Bash(git --no-pager log --oneline -15)",
+      "Bash(git -C \"c:/Users/mojta/personal_projects/fitsyou-web-app\" --no-pager show HEAD:app/dashboard/page.tsx)",
+      "Bash(node -e \"console.log\\(require\\('fs'\\).readFileSync\\('app/dashboard/page.tsx','utf8'\\)\\)\")",
+      "Bash(node -e \"const f=require\\('fs'\\); for \\(const p of ['app/dashboard/page.tsx','app/onboarding/photo/page.tsx','lib/supabase/auth.ts','lib/r2.ts','app/api/user/profile/route.ts']\\){ console.log\\('===== '+p+' ====='\\); console.log\\(f.readFileSync\\(p,'utf8'\\)\\); }\")",
+      "Bash(node -e \"process.stdout.write\\(require\\('fs'\\).readFileSync\\('app/dashboard/page.tsx','utf8'\\)\\)\")",
+      "mcp__claude_ai_monday_com__get_board_info",
+      "mcp__claude_ai_monday_com__get_board_items_page",
+      "mcp__claude_ai_monday_com__create_item",
+      "Read(//c/Users/mojta/.claude/plans/**)",
+      "Bash(grep -E \"\\\\.\\(ts|tsx\\)$\")",
+      "Bash(npm run *)",
+      "Bash(cat)",
+      "Bash(node /tmp/debug_header.mjs)",
+      "Bash(node /tmp/test_fit2.mjs)",
+      "Bash(git commit -m ' *)",
+      "Bash(git push *)",
+      "Bash(git commit *)"
+    ],
+    "additionalDirectories": [
+      "c:\\Users\\mojta\\personal_projects\\fitsyou-web-app\\app\\api\\user\\photo",
+      "c:\\Users\\mojta\\personal_projects\\fitsyou-web-app\\app\\api\\image",
+      "c:\\Users\\mojta\\personal_projects\\fitsyou-web-app\\app\\onboarding\\face",
+      "c:\\Users\\mojta\\personal_projects\\fitsyou-web-app\\app\\onboarding\\photo",
+      "c:\\Users\\mojta\\personal_projects\\fitsyou-web-app\\app\\onboarding\\backdrop",
+      "c:\\Users\\mojta\\personal_projects\\fitsyou-web-app\\app\\dashboard",
+      "c:\\Users\\mojta\\personal_projects\\fitsyou-web-app\\app\\api\\generate",
+      "c:\\Users\\mojta\\.claude\\projects\\c--Users-mojta-personal-projects-fitsyou\\memory",
+      "c:\\Users\\mojta\\personal_projects\\fitsyou-web-app"
+    ]
+  }
+}
