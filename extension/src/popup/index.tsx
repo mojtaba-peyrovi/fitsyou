@@ -21,6 +21,8 @@ interface GeneratePayload {
   product_image_url: string;
   product_title?: string | null;
   store_name?: string;
+  fit_verdict?: string | null;
+  recommended_size?: string | null;
 }
 
 interface ExtractResult {
@@ -94,6 +96,8 @@ async function callGenerate(
     product_image_url: string;
     product_title?: string | null;
     store_name?: string;
+    fit_verdict?: string | null;
+    recommended_size?: string | null;
   }
 ): Promise<GenerateResult | { error: string }> {
   const res = await fetch(`${API_BASE}/api/generate`, {
@@ -302,6 +306,15 @@ function Popup() {
           selected_size: response.selectedSize,
         });
         setFit(fitResult);
+
+        // Persist the fit result the user just saw alongside the try-on, so the
+        // dashboard can show the same verdict + suggested size on the saved card.
+        // Set before the poor-fit branch so it's carried whether the user
+        // generates immediately or confirms through the fit warning.
+        if (fitResult) {
+          payload.fit_verdict = fitResult.verdict;
+          payload.recommended_size = fitResult.recommended_size;
+        }
 
         if (fitResult?.verdict === 'poor') {
           setPending({ token: fitsyou_token, payload });
