@@ -310,6 +310,7 @@ fitsyou-web/
 | Wire affiliate link tagging on saved product URLs | Small | ✅ Done |
 | Full-body photo validation on upload (GPT-4o-mini vision check) | Small | ✅ Done |
 | Fit check — scrape size chart, compare to user measurements, show verdict | Medium | ✅ Done |
+| Dashboard card CRUD — delete try-ons, store logo, enlarge lightbox, download (paid only) | Medium | ✅ Done |
 
 #### Detail
 
@@ -406,4 +407,4 @@ PADDLE_WEBHOOK_SECRET=
 
 ---
 
-*Last updated: 2026-05-30 — Wk 5 complete (incl. fit check). Wk 6 (launch prep) is next.*
+*Last updated: 2026-05-30 — Wk 5 complete (incl. dashboard CRUD). Wk 6 (launch prep) is next.*
