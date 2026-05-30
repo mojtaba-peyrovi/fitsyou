@@ -118,7 +118,7 @@ File input accepts: jpg, png, webp.
 
 ---
 
-### Wk 2 · Extension + Extraction 🔄 In Progress
+### Wk 2 · Extension + Extraction ✅ Complete
 
 | Task | Effort | Status | Notes |
 |---|---|---|---|
@@ -265,14 +265,14 @@ fitsyou-web/
 
 ---
 
-### Wk 4 · Generation Pipeline + Web Profile 🔄 Up Next
+### Wk 4 · Generation Pipeline + Web Profile ✅ Complete
 
 | Task | Effort | Status |
 |---|---|---|
-| Build saved try-on library grid + one-click buy links | Medium | ⬜ Not Started |
-| Wire composition API — photo + product image → 2–3 variants | Large | ⬜ Not Started |
-| Build backdrop system (5 categories, random rotation) | Medium | ⬜ Not Started |
-| Cache generation results + free/paid resolution split | Small | ⬜ Not Started |
+| Build saved try-on library grid + one-click buy links | Medium | ✅ Done |
+| Wire composition API — photo + product image → 2–3 variants | Large | ✅ Done |
+| Build backdrop system (5 categories, random rotation) | Medium | ✅ Done |
+| Cache generation results + free/paid resolution split | Small | ✅ Done |
 
 #### Detail
 
@@ -299,7 +299,7 @@ fitsyou-web/
 
 ---
 
-### Wk 5 · Payments + Hardening ⬜ Not Started
+### Wk 5 · Payments + Hardening 🔄 Up Next
 
 | Task | Effort | Status |
 |---|---|---|
