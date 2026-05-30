@@ -9,10 +9,19 @@ type PopupState =
   | 'needs-setup'
   | 'idle'
   | 'extracting'
+  | 'checking-fit'
+  | 'fit-warning'
   | 'generating'
   | 'success'
   | 'error'
   | 'manual';
+
+interface GeneratePayload {
+  product_url: string;
+  product_image_url: string;
+  product_title?: string | null;
+  store_name?: string;
+}
 
 interface ExtractResult {
   success: boolean;
@@ -151,6 +160,7 @@ function Popup() {
   const [currentTabUrl, setCurrentTabUrl] = useState('');
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [fit, setFit] = useState<FitResult | null>(null);
+  const [pending, setPending] = useState<{ token: string; payload: GeneratePayload } | null>(null);
 
   async function checkAuth() {
     chrome.storage.local.get(['fitsyou_token'], async (items) => {
@@ -228,48 +238,61 @@ function Popup() {
         return;
       }
 
-      setStatus('generating');
+      setStatus('checking-fit');
       setFit(null);
+      setPending(null);
 
       chrome.storage.local.get(['fitsyou_token'], async (items) => {
         const fitsyou_token = items['fitsyou_token'] as string | undefined;
         if (!fitsyou_token) { setStatus('signed-out'); return; }
 
-        // Fit check runs in parallel with generation; it's free and never blocks.
-        const fitPromise = callFit(fitsyou_token, {
+        const payload: GeneratePayload = {
+          product_url: tabUrl,
+          product_image_url: response.imageUrl!,
+          product_title: response.productTitle ?? null,
+          store_name: storeName(tabUrl),
+        };
+
+        // Fit check first (free, ~1-2s). If it predicts a poor match, ask before
+        // spending a generation credit instead of auto-generating.
+        const fitResult = await callFit(fitsyou_token, {
           product_title: response.productTitle ?? null,
           size_chart_text: response.sizeChartText,
           available_sizes: response.availableSizes,
           selected_size: response.selectedSize,
         });
+        setFit(fitResult);
 
-        const result = await callGenerate(fitsyou_token, {
-          product_url: tabUrl,
-          product_image_url: response.imageUrl!,
-          product_title: response.productTitle ?? null,
-          store_name: storeName(tabUrl),
-        });
-
-        if ('error' in result) {
-          if (result.error.includes('limit')) {
-            setStatus('error');
-            setMessage('Monthly limit reached. Upgrade your plan at fitsyou.live/dashboard.');
-          } else {
-            setStatus('error');
-            setMessage(result.error);
-          }
+        if (fitResult?.verdict === 'poor') {
+          setPending({ token: fitsyou_token, payload });
+          setStatus('fit-warning');
           return;
         }
 
-        const blobUrl = result.preview_path
-          ? await loadPreviewBlob(result.preview_path, fitsyou_token)
-          : null;
-        setPreviewUrl(blobUrl);
-        setFit(await fitPromise);
-        setStatus('success');
-        setMessage(response.productTitle ?? 'Try-on ready!');
+        await runGenerate(fitsyou_token, payload);
       });
     });
+  }
+
+  // Runs the (credit-consuming) try-on generation and renders the result.
+  async function runGenerate(token: string, payload: GeneratePayload) {
+    setStatus('generating');
+    const result = await callGenerate(token, payload);
+
+    if ('error' in result) {
+      setStatus('error');
+      setMessage(
+        result.error.includes('limit')
+          ? 'Monthly limit reached. Upgrade your plan at fitsyou.live/dashboard.'
+          : result.error
+      );
+      return;
+    }
+
+    const blobUrl = result.preview_path ? await loadPreviewBlob(result.preview_path, token) : null;
+    setPreviewUrl(blobUrl);
+    setStatus('success');
+    setMessage(payload.product_title ?? 'Try-on ready!');
   }
 
   async function handleFileUpload(e: Event) {
@@ -356,6 +379,30 @@ function Popup() {
       )}
 
       {status === 'extracting' && <p style={hintStyle}>Finding product image…</p>}
+
+      {status === 'checking-fit' && <p style={hintStyle}>Checking fit…</p>}
+
+      {status === 'fit-warning' && fit && (
+        <div>
+          <FitBadge fit={fit} onAddMeasurements={() => openTab('/dashboard')} />
+          <p style={hintStyle}>
+            This probably won’t be a great match. Generating a try-on uses one of your
+            credits — try it on anyway?
+          </p>
+          <button
+            onClick={() => { if (pending) runGenerate(pending.token, pending.payload); }}
+            style={btnStyle}
+          >
+            Try it on anyway
+          </button>
+          <button
+            onClick={() => { setPending(null); setStatus('idle'); }}
+            style={{ ...btnStyle, background: '#555', marginTop: '6px' }}
+          >
+            No thanks
+          </button>
+        </div>
+      )}
 
       {status === 'generating' && (
         <p style={hintStyle}>Generating your try-on… this takes ~15 sec.</p>
