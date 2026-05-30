@@ -156,20 +156,6 @@ __webpack_require__.r(__webpack_exports__);
 
 
 const API_BASE = 'https://fitsyou-web.vercel.app';
-async function loadPreviewBlob(path, token) {
-    try {
-        const res = await fetch(`${API_BASE}${path}`, {
-            headers: { Authorization: `Bearer ${token}` },
-        });
-        if (!res.ok)
-            return null;
-        const blob = await res.blob();
-        return URL.createObjectURL(blob);
-    }
-    catch {
-        return null;
-    }
-}
 function storeName(url) {
     try {
         return new URL(url).hostname.replace(/^www\./, '').split('.')[0];
@@ -178,31 +164,27 @@ function storeName(url) {
         return '';
     }
 }
-async function callGenerate(token, payload) {
-    const res = await fetch(`${API_BASE}/api/generate`, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify(payload),
-    });
-    const json = await res.json().catch(() => ({ error: 'Generation failed' }));
-    if (!res.ok) {
-        const j = json;
-        const msg = j.detail ? `${j.error}: ${j.detail}` : (j.error ?? `Error ${res.status}`);
-        return { error: msg };
+// Our own R2 objects (wardrobe pictures, generated try-ons, uploaded products)
+// are private and must be loaded through the authenticated /api/image route.
+// Scraped retailer images are public URLs that load directly.
+const R2_PREFIXES = ['wardrobe/', 'try-ons/', 'user-photos/', 'user-faces/', 'product-images/'];
+function authKeyFor(src) {
+    try {
+        const key = new URL(src).pathname.replace(/^\//, '');
+        return R2_PREFIXES.some((p) => key.startsWith(p)) ? key : null;
     }
-    return json;
+    catch {
+        return null;
+    }
+}
+async function getToken() {
+    return new Promise((resolve) => chrome.storage.local.get(['fitsyou_token'], (items) => resolve(items['fitsyou_token'])));
 }
 async function callFit(token, payload) {
     try {
         const res = await fetch(`${API_BASE}/api/fit`, {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                Authorization: `Bearer ${token}`,
-            },
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
             body: JSON.stringify(payload),
         });
         if (!res.ok)
@@ -210,7 +192,35 @@ async function callFit(token, payload) {
         return (await res.json());
     }
     catch {
-        return null; // fit check must never block the try-on flow
+        return null; // fit check must never block saving
+    }
+}
+async function saveWishlist(token, payload) {
+    try {
+        const res = await fetch(`${API_BASE}/api/wishlist`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+            body: JSON.stringify(payload),
+        });
+        const json = await res.json().catch(() => ({ error: 'Save failed' }));
+        if (!res.ok)
+            return { error: json.error ?? `Error ${res.status}` };
+        return { ok: true };
+    }
+    catch {
+        return { error: 'Network error — please try again.' };
+    }
+}
+async function fetchList(token, path) {
+    try {
+        const res = await fetch(`${API_BASE}${path}`, { headers: { Authorization: `Bearer ${token}` } });
+        if (!res.ok)
+            return [];
+        const json = (await res.json());
+        return json.items ?? [];
+    }
+    catch {
+        return [];
     }
 }
 const FIT_BADGE = {
@@ -219,54 +229,74 @@ const FIT_BADGE = {
     poor: { label: 'Likely won’t fit', bg: '#fee2e2', fg: '#991b1b' },
     unknown: { label: 'Fit unknown', bg: '#f1f5f9', fg: '#475569' },
 };
+// Loads an image, fetching it through the authenticated route (as a blob) when
+// it points at one of our private R2 objects.
+function AuthImg({ src, token, alt, style }) {
+    const [resolved, setResolved] = (0,preact_hooks__WEBPACK_IMPORTED_MODULE_2__.useState)(null);
+    (0,preact_hooks__WEBPACK_IMPORTED_MODULE_2__.useEffect)(() => {
+        let revoke = null;
+        if (!src) {
+            setResolved(null);
+            return;
+        }
+        const key = authKeyFor(src);
+        if (!key) {
+            setResolved(src);
+            return;
+        }
+        fetch(`${API_BASE}/api/image?key=${encodeURIComponent(key)}`, { headers: { Authorization: `Bearer ${token}` } })
+            .then((r) => (r.ok ? r.blob() : null))
+            .then((blob) => {
+            if (blob) {
+                revoke = URL.createObjectURL(blob);
+                setResolved(revoke);
+            }
+        })
+            .catch(() => setResolved(null));
+        return () => {
+            if (revoke)
+                URL.revokeObjectURL(revoke);
+        };
+    }, [src, token]);
+    if (!resolved)
+        return (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("div", { style: { ...style, background: '#f0f0f0' } });
+    return (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("img", { src: resolved, alt: alt, style: style });
+}
 function FitBadge({ fit, onAddMeasurements }) {
     const style = FIT_BADGE[fit.verdict] ?? FIT_BADGE.unknown;
-    const getMeasurementIcon = (fit) => {
-        if (fit === 'good')
-            return '✓';
-        if (fit === 'borderline')
-            return '≈';
-        if (fit === 'poor')
-            return '✗';
-        return '?';
-    };
-    return ((0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("div", { style: { background: style.bg, color: style.fg, borderRadius: '6px', padding: '8px 10px', marginBottom: '8px' }, children: [(0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("div", { style: { fontSize: '13px', fontWeight: 700 }, children: [style.label, fit.recommended_size ? ` · size ${fit.recommended_size}` : ''] }), fit.reason && (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("div", { style: { fontSize: '12px', marginTop: '2px', lineHeight: 1.35 }, children: fit.reason }), fit.details && fit.details.comparisons.length > 0 && ((0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("div", { style: { fontSize: '11px', marginTop: '6px', borderTop: `1px solid ${style.fg}33`, paddingTop: '6px' }, children: [(0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("div", { style: { fontWeight: 600, marginBottom: '3px' }, children: ["Size ", fit.details.evaluatedSize, ":"] }), fit.details.comparisons.map((comp) => ((0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("div", { style: { marginBottom: '2px', fontFamily: 'monospace' }, children: [(0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("span", { style: { marginRight: '4px' }, children: getMeasurementIcon(comp.fit) }), (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("span", { style: { textTransform: 'capitalize', minWidth: '50px', display: 'inline-block' }, children: [comp.measurement, ":"] }), comp.userValue !== null ? ((0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("span", { children: [comp.userValue, "cm vs ", comp.rangeMin, "-", comp.rangeMax, "cm"] })) : ((0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("span", { style: { opacity: 0.7 }, children: "not provided" }))] }, comp.measurement)))] })), fit.needs_measurements && ((0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("button", { onClick: onAddMeasurements, style: { marginTop: '6px', background: 'none', border: 'none', padding: 0, color: style.fg, fontSize: '12px', fontWeight: 600, textDecoration: 'underline', cursor: 'pointer' }, children: "Add your measurements \u2192" }))] }));
+    const icon = (f) => (f === 'good' ? '✓' : f === 'borderline' ? '≈' : f === 'poor' ? '✗' : '?');
+    return ((0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("div", { style: { background: style.bg, color: style.fg, borderRadius: '6px', padding: '8px 10px', marginBottom: '8px' }, children: [(0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("div", { style: { fontSize: '13px', fontWeight: 700 }, children: [style.label, fit.recommended_size ? ` · size ${fit.recommended_size}` : ''] }), fit.reason && (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("div", { style: { fontSize: '12px', marginTop: '2px', lineHeight: 1.35 }, children: fit.reason }), fit.details && fit.details.comparisons.length > 0 && ((0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("div", { style: { fontSize: '11px', marginTop: '6px', borderTop: `1px solid ${style.fg}33`, paddingTop: '6px' }, children: [(0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("div", { style: { fontWeight: 600, marginBottom: '3px' }, children: ["Size ", fit.details.evaluatedSize, ":"] }), fit.details.comparisons.map((comp) => ((0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("div", { style: { marginBottom: '2px', fontFamily: 'monospace' }, children: [(0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("span", { style: { marginRight: '4px' }, children: icon(comp.fit) }), (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("span", { style: { textTransform: 'capitalize', minWidth: '50px', display: 'inline-block' }, children: [comp.measurement, ":"] }), comp.userValue !== null ? ((0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("span", { children: [comp.userValue, "cm vs ", comp.rangeMin, "-", comp.rangeMax, "cm"] })) : ((0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("span", { style: { opacity: 0.7 }, children: "not provided" }))] }, comp.measurement)))] })), fit.needs_measurements && ((0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("button", { onClick: onAddMeasurements, style: { marginTop: '6px', background: 'none', border: 'none', padding: 0, color: style.fg, fontSize: '12px', fontWeight: 600, textDecoration: 'underline', cursor: 'pointer' }, children: "Add your measurements \u2192" }))] }));
 }
 function Popup() {
     const [status, setStatus] = (0,preact_hooks__WEBPACK_IMPORTED_MODULE_2__.useState)('checking');
+    const [menu, setMenu] = (0,preact_hooks__WEBPACK_IMPORTED_MODULE_2__.useState)('home');
     const [message, setMessage] = (0,preact_hooks__WEBPACK_IMPORTED_MODULE_2__.useState)('');
+    const [token, setToken] = (0,preact_hooks__WEBPACK_IMPORTED_MODULE_2__.useState)('');
     const [currentTabUrl, setCurrentTabUrl] = (0,preact_hooks__WEBPACK_IMPORTED_MODULE_2__.useState)('');
-    const [previewUrl, setPreviewUrl] = (0,preact_hooks__WEBPACK_IMPORTED_MODULE_2__.useState)(null);
     const [fit, setFit] = (0,preact_hooks__WEBPACK_IMPORTED_MODULE_2__.useState)(null);
-    const [pending, setPending] = (0,preact_hooks__WEBPACK_IMPORTED_MODULE_2__.useState)(null);
+    const [wishlist, setWishlist] = (0,preact_hooks__WEBPACK_IMPORTED_MODULE_2__.useState)([]);
+    const [wardrobe, setWardrobe] = (0,preact_hooks__WEBPACK_IMPORTED_MODULE_2__.useState)([]);
+    const [listsLoaded, setListsLoaded] = (0,preact_hooks__WEBPACK_IMPORTED_MODULE_2__.useState)(false);
     async function checkAuth() {
-        chrome.storage.local.get(['fitsyou_token'], async (items) => {
-            const fitsyou_token = items['fitsyou_token'];
-            if (!fitsyou_token) {
+        const fitsyou_token = await getToken();
+        if (!fitsyou_token) {
+            setStatus('signed-out');
+            return;
+        }
+        setToken(fitsyou_token);
+        try {
+            const res = await fetch(`${API_BASE}/api/user/profile`, { headers: { Authorization: `Bearer ${fitsyou_token}` } });
+            if (res.status === 401) {
+                chrome.storage.local.remove(['fitsyou_token', 'fitsyou_refresh_token']);
                 setStatus('signed-out');
                 return;
             }
-            try {
-                const res = await fetch(`${API_BASE}/api/user/profile`, {
-                    headers: { Authorization: `Bearer ${fitsyou_token}` },
-                });
-                if (res.status === 401) {
-                    chrome.storage.local.remove(['fitsyou_token', 'fitsyou_refresh_token']);
-                    setStatus('signed-out');
-                    return;
-                }
-                const profile = await res.json();
-                if (!profile?.photo_url) {
-                    setStatus('needs-setup');
-                }
-                else {
-                    setStatus('idle');
-                }
-            }
-            catch {
-                setStatus('signed-out');
-            }
-        });
+            const profile = await res.json();
+            setStatus(!profile?.photo_url ? 'needs-setup' : 'idle');
+        }
+        catch {
+            setStatus('signed-out');
+        }
     }
     (0,preact_hooks__WEBPACK_IMPORTED_MODULE_2__.useEffect)(() => {
         checkAuth();
@@ -277,12 +307,26 @@ function Popup() {
         chrome.storage.onChanged.addListener(onStorageChange);
         return () => chrome.storage.onChanged.removeListener(onStorageChange);
     }, []);
+    // Lazy-load the user's lists the first time they're needed.
+    async function loadLists(t) {
+        const [w, c] = await Promise.all([
+            fetchList(t, '/api/wishlist'),
+            fetchList(t, '/api/wardrobe'),
+        ]);
+        setWishlist(w);
+        setWardrobe(c);
+        setListsLoaded(true);
+    }
+    (0,preact_hooks__WEBPACK_IMPORTED_MODULE_2__.useEffect)(() => {
+        if (status === 'idle' && token && !listsLoaded)
+            loadLists(token);
+    }, [status, token, listsLoaded]);
     function openTab(path) {
         const url = new URL(`${API_BASE}${path}`);
         url.searchParams.set('extensionId', chrome.runtime.id);
         chrome.tabs.create({ url: url.toString() });
     }
-    async function handleTryOn() {
+    async function handleAddToWishlist() {
         setStatus('extracting');
         const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
         if (!tab.id) {
@@ -293,121 +337,95 @@ function Popup() {
         const tabUrl = tab.url ?? '';
         setCurrentTabUrl(tabUrl);
         chrome.tabs.sendMessage(tab.id, { type: 'EXTRACT_PRODUCT' }, async (response) => {
-            // Content script not reachable: either a stale tab (opened before the
-            // extension was reloaded) or a site we don't inject into. Tell the user
-            // to refresh rather than dumping them into manual upload.
             if (chrome.runtime.lastError || !response) {
                 setStatus('error');
-                setMessage('Refresh this page, then click "Try this on" again. (If it keeps failing, this store may not be supported yet — use manual upload.)');
+                setMessage('Refresh this page, then click again. (If it keeps failing, this store may not be supported yet — use manual upload.)');
                 return;
             }
-            // Content script responded but found no product image → manual upload.
             if (!response.success || !response.imageUrl) {
                 setStatus('manual');
                 return;
             }
-            setStatus('checking-fit');
-            setFit(null);
-            setPending(null);
-            chrome.storage.local.get(['fitsyou_token'], async (items) => {
-                const fitsyou_token = items['fitsyou_token'];
-                if (!fitsyou_token) {
-                    setStatus('signed-out');
-                    return;
-                }
-                const payload = {
-                    product_url: tabUrl,
-                    product_image_url: response.imageUrl,
-                    product_title: response.productTitle ?? null,
-                    store_name: storeName(tabUrl),
-                };
-                // Fit check first (free, ~1-2s). If it predicts a poor match, ask before
-                // spending a generation credit instead of auto-generating.
-                const fitResult = await callFit(fitsyou_token, {
-                    product_title: response.productTitle ?? null,
-                    size_chart_text: response.sizeChartText,
-                    available_sizes: response.availableSizes,
-                    selected_size: response.selectedSize,
-                });
-                setFit(fitResult);
-                if (fitResult?.verdict === 'poor') {
-                    setPending({ token: fitsyou_token, payload });
-                    setStatus('fit-warning');
-                    return;
-                }
-                await runGenerate(fitsyou_token, payload);
-            });
-        });
-    }
-    // Runs the (credit-consuming) try-on generation and renders the result.
-    async function runGenerate(token, payload) {
-        setStatus('generating');
-        const result = await callGenerate(token, payload);
-        if ('error' in result) {
-            setStatus('error');
-            setMessage(result.error.includes('limit')
-                ? 'Monthly limit reached. Upgrade your plan at fitsyou.live/dashboard.'
-                : result.error);
-            return;
-        }
-        const blobUrl = result.preview_path ? await loadPreviewBlob(result.preview_path, token) : null;
-        setPreviewUrl(blobUrl);
-        setStatus('success');
-        setMessage(payload.product_title ?? 'Try-on ready!');
-    }
-    async function handleFileUpload(e) {
-        const file = e.target.files?.[0];
-        if (!file)
-            return;
-        setStatus('generating');
-        chrome.storage.local.get(['fitsyou_token'], async (items) => {
-            const fitsyou_token = items['fitsyou_token'];
-            if (!fitsyou_token) {
+            const t = (await getToken()) ?? token;
+            if (!t) {
                 setStatus('signed-out');
                 return;
             }
-            // Upload the product screenshot to R2 first
-            const formData = new FormData();
-            formData.append('file', file);
-            let productImageUrl;
-            try {
-                const uploadRes = await fetch(`${API_BASE}/api/upload-product-image`, {
-                    method: 'POST',
-                    headers: { Authorization: `Bearer ${fitsyou_token}` },
-                    body: formData,
-                });
-                if (!uploadRes.ok)
-                    throw new Error('Upload failed');
-                const uploadData = await uploadRes.json();
-                productImageUrl = uploadData.url;
-            }
-            catch {
-                setStatus('error');
-                setMessage('Failed to upload product image.');
-                return;
-            }
-            // Then generate
-            const productUrl = currentTabUrl || `manual-upload-${Date.now()}`;
-            const result = await callGenerate(fitsyou_token, {
-                product_url: productUrl,
-                product_image_url: productImageUrl,
-                store_name: currentTabUrl ? storeName(currentTabUrl) : undefined,
+            setStatus('checking-fit');
+            setFit(null);
+            // Compute the fit verdict once, at save time, so the dashboard + Fitting
+            // Room show the same badge the user saw here. Free — no credit spent.
+            const fitResult = await callFit(t, {
+                product_title: response.productTitle ?? null,
+                size_chart_text: response.sizeChartText,
+                available_sizes: response.availableSizes,
+                selected_size: response.selectedSize,
+            });
+            setFit(fitResult);
+            setStatus('saving');
+            const result = await saveWishlist(t, {
+                product_url: tabUrl,
+                product_image_url: response.imageUrl,
+                product_title: response.productTitle ?? null,
+                store_name: storeName(tabUrl),
+                available_sizes: response.availableSizes,
+                fit_verdict: fitResult?.verdict ?? null,
+                recommended_size: fitResult?.recommended_size ?? null,
             });
             if ('error' in result) {
                 setStatus('error');
                 setMessage(result.error);
                 return;
             }
-            const blobUrl = result.preview_path
-                ? await loadPreviewBlob(result.preview_path, fitsyou_token)
-                : null;
-            setPreviewUrl(blobUrl);
-            setStatus('success');
-            setMessage('Try-on ready!');
+            setMessage(response.productTitle ?? 'Added to your wishlist');
+            setListsLoaded(false); // refresh lists next time the menu opens
+            setStatus('saved');
         });
     }
-    return ((0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("div", { style: { padding: '16px', fontFamily: 'sans-serif' }, children: [(0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("div", { style: { fontWeight: 700, fontSize: '16px', marginBottom: '12px' }, children: "fitsyou" }), status === 'checking' && (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("p", { style: hintStyle, children: "Loading\u2026" }), status === 'signed-out' && ((0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("div", { children: [(0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("p", { style: hintStyle, children: "Sign in to start trying on clothes." }), (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("button", { onClick: () => openTab('/auth/extension'), style: btnStyle, children: "Sign in to fitsyou" })] })), status === 'needs-setup' && ((0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("div", { children: [(0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("p", { style: hintStyle, children: "Complete your profile to start trying on clothes." }), (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("button", { onClick: () => openTab('/onboarding/photo'), style: btnStyle, children: "Complete setup" })] })), status === 'idle' && ((0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("button", { onClick: handleTryOn, style: btnStyle, children: "Try this on" })), status === 'extracting' && (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("p", { style: hintStyle, children: "Finding product image\u2026" }), status === 'checking-fit' && (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("p", { style: hintStyle, children: "Checking fit\u2026" }), status === 'fit-warning' && fit && ((0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("div", { children: [(0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)(FitBadge, { fit: fit, onAddMeasurements: () => openTab('/dashboard') }), (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("p", { style: hintStyle, children: "This probably won\u2019t be a great match. Generating a try-on uses one of your credits \u2014 try it on anyway?" }), (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("button", { onClick: () => { if (pending)
-                            runGenerate(pending.token, pending.payload); }, style: btnStyle, children: "Try it on anyway" }), (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("button", { onClick: () => { setPending(null); setStatus('idle'); }, style: { ...btnStyle, background: '#555', marginTop: '6px' }, children: "No thanks" })] })), status === 'generating' && ((0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("p", { style: hintStyle, children: "Generating your try-on\u2026 this takes ~15 sec." })), status === 'success' && ((0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("div", { children: [previewUrl && ((0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("img", { src: previewUrl, alt: "Try-on preview", style: { width: '100%', borderRadius: '6px', marginBottom: '8px', display: 'block' } })), fit && (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)(FitBadge, { fit: fit, onAddMeasurements: () => openTab('/dashboard') }), (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("p", { style: { color: '#16a34a', fontSize: '13px', marginBottom: '10px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }, children: ["\u2713 ", message] }), (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("button", { onClick: () => openTab('/dashboard'), style: btnStyle, children: "View all try-ons \u2192" })] })), status === 'error' && ((0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("div", { children: [(0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("p", { style: { color: '#dc2626', fontSize: '13px', marginBottom: '10px' }, children: message }), (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("button", { onClick: () => setStatus('idle'), style: { ...btnStyle, background: '#555' }, children: "Try again" })] })), status === 'manual' && ((0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("div", { children: [(0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("p", { style: hintStyle, children: "Can't auto-detect the product image. Screenshot the item and upload it below." }), (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("input", { type: "file", accept: "image/jpeg,image/png,image/webp", onChange: handleFileUpload, style: { fontSize: '12px', width: '100%', marginBottom: '8px' } }), (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("button", { onClick: () => setStatus('idle'), style: { ...btnStyle, background: '#555', marginTop: '6px' }, children: "\u2190 Back" })] }))] }));
+    async function handleFileUpload(e) {
+        const file = e.target.files?.[0];
+        if (!file)
+            return;
+        setStatus('saving');
+        const t = (await getToken()) ?? token;
+        if (!t) {
+            setStatus('signed-out');
+            return;
+        }
+        const formData = new FormData();
+        formData.append('file', file);
+        let productImageUrl;
+        try {
+            const uploadRes = await fetch(`${API_BASE}/api/upload-product-image`, {
+                method: 'POST',
+                headers: { Authorization: `Bearer ${t}` },
+                body: formData,
+            });
+            if (!uploadRes.ok)
+                throw new Error('Upload failed');
+            productImageUrl = (await uploadRes.json()).url;
+        }
+        catch {
+            setStatus('error');
+            setMessage('Failed to upload product image.');
+            return;
+        }
+        const productUrl = currentTabUrl || `manual-upload-${Date.now()}`;
+        const result = await saveWishlist(t, {
+            product_url: productUrl,
+            product_image_url: productImageUrl,
+            store_name: currentTabUrl ? storeName(currentTabUrl) : undefined,
+        });
+        if ('error' in result) {
+            setStatus('error');
+            setMessage(result.error);
+            return;
+        }
+        setMessage('Added to your wishlist');
+        setListsLoaded(false);
+        setStatus('saved');
+    }
+    return ((0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("div", { style: { padding: '16px', fontFamily: 'sans-serif' }, children: [(0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("div", { style: { fontWeight: 700, fontSize: '16px', marginBottom: '12px' }, children: "fitsyou" }), status === 'checking' && (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("p", { style: hintStyle, children: "Loading\u2026" }), status === 'signed-out' && ((0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("div", { children: [(0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("p", { style: hintStyle, children: "Sign in to start building outfits." }), (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("button", { onClick: () => openTab('/auth/extension'), style: btnStyle, children: "Sign in to fitsyou" })] })), status === 'needs-setup' && ((0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("div", { children: [(0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("p", { style: hintStyle, children: "Complete your profile to start building outfits." }), (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("button", { onClick: () => openTab('/onboarding/photo'), style: btnStyle, children: "Complete setup" })] })), status === 'idle' && ((0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("div", { children: [(0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("button", { onClick: handleAddToWishlist, style: btnStyle, children: "+ Add to wishlist" }), (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("button", { onClick: () => openTab('/dashboard?tab=fitting-room'), style: { ...btnStyle, background: '#9d50dd', marginTop: '8px' }, children: "Build an outfit \u2192" }), (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("div", { style: tabBarStyle, children: ['home', 'wishlist', 'wardrobe'].map((m) => ((0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("button", { onClick: () => setMenu(m), style: { ...tabStyle, ...(menu === m ? tabActiveStyle : {}) }, children: m === 'home' ? 'Home' : m === 'wishlist' ? `Wishlist${wishlist.length ? ` (${wishlist.length})` : ''}` : `Wardrobe${wardrobe.length ? ` (${wardrobe.length})` : ''}` }, m))) }), menu === 'home' && ((0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("p", { style: { ...hintStyle, marginTop: '10px' }, children: "On a product page? Add it to your wishlist. Then open the Fitting Room to combine items into a look." })), menu === 'wishlist' && ((0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("div", { style: listStyle, children: !listsLoaded ? ((0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("p", { style: hintStyle, children: "Loading\u2026" })) : wishlist.length === 0 ? ((0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("p", { style: hintStyle, children: "No wishlist items yet." })) : (wishlist.map((item) => ((0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("div", { style: rowStyle, children: [(0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)(AuthImg, { src: item.product_image_url, token: token, alt: item.product_title ?? 'Item', style: thumbStyle }), (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("div", { style: { flex: 1, minWidth: 0 }, children: [(0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("div", { style: rowTitleStyle, children: item.product_title ?? 'Untitled item' }), item.fit_verdict && ((0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("div", { style: { fontSize: '11px', color: (FIT_BADGE[item.fit_verdict] ?? FIT_BADGE.unknown).fg }, children: [(FIT_BADGE[item.fit_verdict] ?? FIT_BADGE.unknown).label, item.recommended_size ? ` · ${item.recommended_size}` : ''] }))] })] }, item.id)))) })), menu === 'wardrobe' && ((0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("div", { style: listStyle, children: !listsLoaded ? ((0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("p", { style: hintStyle, children: "Loading\u2026" })) : wardrobe.length === 0 ? ((0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("p", { style: hintStyle, children: ["No wardrobe items yet.", ' ', (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("button", { onClick: () => openTab('/dashboard?tab=wardrobe'), style: linkBtnStyle, children: "Add some \u2192" })] })) : (wardrobe.map((item) => ((0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("div", { style: rowStyle, children: [(0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)(AuthImg, { src: item.image_url, token: token, alt: item.name ?? 'Item', style: thumbStyle }), (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("div", { style: { flex: 1, minWidth: 0 }, children: [(0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("div", { style: rowTitleStyle, children: item.name ?? 'Untitled' }), item.category && (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("div", { style: { fontSize: '11px', color: '#888', textTransform: 'capitalize' }, children: item.category })] })] }, item.id)))) }))] })), status === 'extracting' && (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("p", { style: hintStyle, children: "Finding product image\u2026" }), status === 'checking-fit' && (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("p", { style: hintStyle, children: "Checking fit\u2026" }), status === 'saving' && (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("p", { style: hintStyle, children: "Saving to your wishlist\u2026" }), status === 'saved' && ((0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("div", { children: [fit && (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)(FitBadge, { fit: fit, onAddMeasurements: () => openTab('/dashboard') }), (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("p", { style: { color: '#16a34a', fontSize: '13px', marginBottom: '10px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }, children: ["\u2713 ", message] }), (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("button", { onClick: () => openTab('/dashboard?tab=fitting-room'), style: { ...btnStyle, background: '#9d50dd' }, children: "Open Fitting Room \u2192" }), (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("button", { onClick: () => { setFit(null); setMenu('wishlist'); setStatus('idle'); }, style: { ...btnStyle, background: '#555', marginTop: '6px' }, children: "Done" })] })), status === 'error' && ((0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("div", { children: [(0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("p", { style: { color: '#dc2626', fontSize: '13px', marginBottom: '10px' }, children: message }), (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("button", { onClick: () => setStatus('idle'), style: { ...btnStyle, background: '#555' }, children: "Back" })] })), status === 'manual' && ((0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("div", { children: [(0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("p", { style: hintStyle, children: "Can't auto-detect the product image. Screenshot the item and upload it below." }), (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("input", { type: "file", accept: "image/jpeg,image/png,image/webp", onChange: handleFileUpload, style: { fontSize: '12px', width: '100%', marginBottom: '8px' } }), (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("button", { onClick: () => setStatus('idle'), style: { ...btnStyle, background: '#555', marginTop: '6px' }, children: "\u2190 Back" })] }))] }));
 }
 const btnStyle = {
     width: '100%',
@@ -424,6 +442,67 @@ const hintStyle = {
     color: '#666',
     fontSize: '13px',
     marginBottom: '10px',
+};
+const tabBarStyle = {
+    display: 'flex',
+    gap: '2px',
+    borderBottom: '1px solid #e5e5e5',
+    marginTop: '14px',
+};
+const tabStyle = {
+    flex: 1,
+    padding: '7px 4px',
+    fontSize: '12px',
+    fontWeight: 500,
+    color: '#666',
+    background: 'transparent',
+    border: 'none',
+    borderBottom: '2px solid transparent',
+    marginBottom: '-1px',
+    cursor: 'pointer',
+};
+const tabActiveStyle = {
+    color: '#111',
+    fontWeight: 700,
+    borderBottom: '2px solid #111',
+};
+const listStyle = {
+    marginTop: '10px',
+    maxHeight: '260px',
+    overflowY: 'auto',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '8px',
+};
+const rowStyle = {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+};
+const thumbStyle = {
+    width: '40px',
+    height: '40px',
+    borderRadius: '6px',
+    objectFit: 'cover',
+    flexShrink: 0,
+};
+const rowTitleStyle = {
+    fontSize: '12px',
+    fontWeight: 600,
+    color: '#111',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+};
+const linkBtnStyle = {
+    background: 'none',
+    border: 'none',
+    padding: 0,
+    color: '#9d50dd',
+    fontSize: '12px',
+    fontWeight: 600,
+    textDecoration: 'underline',
+    cursor: 'pointer',
 };
 (0,preact__WEBPACK_IMPORTED_MODULE_1__.render)((0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)(Popup, {}), document.getElementById('app'));
 

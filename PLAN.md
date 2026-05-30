@@ -11,7 +11,7 @@
 
 fitsyou is a lightweight Chrome extension + web profile that lets users see how a clothing item from any fashion site looks on them — using their own photo — before they buy.
 
-**Quality bar:** good enough to make a buy decision. Not studio perfect. Not a wardrobe manager. Not a styling tool. One thing done well.
+**Quality bar:** good enough to make a buy decision. Not studio perfect. The v1 core is one thing done well: see it on yourself. **From Wk 6** this expands into mix-and-match — collect items from any retailer (wishlist) + your own clothes (wardrobe) and compose multiple items into one try-on (fitting room) — without becoming a heavyweight styling tool.
 
 ---
 
@@ -345,11 +345,46 @@ fitsyou-web/
 
 ---
 
-### Wk 6 · Launch Prep ⬜ Not Started
+### Wk 6 · Mix & Match — Wishlist + Wardrobe + Fitting Room ⬜ Not Started
+
+> **Flow shift:** the extension's primary action changes from instant single-item try-on to
+> **Add to wishlist**. Users collect items from any retailer (Wishlist) and upload their own clothes
+> (Wardrobe), then combine multiple items into **one composed try-on** in the **Fitting Room** and see
+> a **buy-list** with links. This is the core mix-and-match promise.
+
+| # | Task | Effort | Status |
+|---|---|---|---|
+| 1 | Data model — `wishlist_items` + `wardrobe_items` + `outfits` tables + RLS + `profiles.currency` + Realtime; `lib/garments.ts` | Medium | ⬜ Not Started |
+| 2 | Wishlist API — `POST`/`GET`/`DELETE` (affiliate-tagged, stores fit snapshot) | Medium | ⬜ Not Started |
+| 3 | Wardrobe API — `POST`/`GET`/`DELETE` (R2 image upload) + `/api/image` allow-list | Medium | ⬜ Not Started |
+| 4 | Extension rework — replace "Try this on" with "Add to wishlist"; Wishlist + Wardrobe menus; Fitting Room launcher | Large | ⬜ Not Started |
+| 5 | Dashboard tabs (Try-ons \| Wishlist \| Wardrobe \| Fitting Room) + Supabase Realtime live updates + currency selector | Large | ⬜ Not Started |
+| 6 | Multi-garment generation — `/api/outfit`, N garments in one pass, cache by item refs, write `outfits` | Large | ⬜ Not Started |
+| 7 | Fitting Room builder UI — multi-select tray, generate, render composed look | Medium | ⬜ Not Started |
+| 8 | Buy-list + currency-aware hardcoded rewards teaser | Small | ⬜ Not Started |
+
+#### Detail
+
+**New data model (Supabase, RLS `user_id = auth.uid()`):**
+- `wishlist_items` — `id, user_id, product_url, product_image_url, product_title, store_name, available_sizes text[], fit_verdict, recommended_size, created_at`. Fit verdict is computed once at save time (reuses `/api/fit`) and stored on the row.
+- `wardrobe_items` — `id, user_id, name, category` (top/bottom/dress/outerwear/shoes/accessory)`, image_url` (R2 `wardrobe/{user_id}/{ts}.jpg`)`, created_at`.
+- `outfits` — `id, user_id, name, item_refs jsonb` (ordered `[{source:'wishlist'|'wardrobe', id}]`)`, output_image_urls text[], backdrop_used, buy_list jsonb` (snapshot of retailer items)`, created_at, expires_at`.
+- `profiles.currency text default 'EUR'` — drives rewards/price formatting via `Intl.NumberFormat`.
+- Realtime enabled on `wishlist_items` + `wardrobe_items` so extension-saved items appear on an open dashboard without a manual refresh (refetch-on-focus fallback).
+
+**Extension (`extension/src/popup/index.tsx`):** primary button → Add to wishlist (extract → `/api/fit` free → `POST /api/wishlist`, no credit). Two in-popup menus (Wishlist, Wardrobe) listing the user's items with thumbnails + fit badge + delete. A **Fitting Room** launcher opens `/dashboard?tab=fitting-room`. Generate/preview logic moves out of the popup to the dashboard.
+
+**Generation (`/api/outfit`, reuses `/api/generate` helpers):** resolves selected wishlist/wardrobe items → garment images, passes body [+ face] + **all garments** to `gpt-image-1.5` `/v1/images/edits` in one pass, layered by category in `item_refs` order. 1 credit per outfit; cache key = hash of sorted `item_refs`. Buy-list = retailer (wishlist) items in the outfit, affiliate-tagged; wardrobe items shown as "from your wardrobe" (no link). Rewards teaser is hardcoded, "Coming soon", amounts in the user's currency.
+
+**Reuses:** `/api/fit` + `lib/fit-assessment.ts`, `lib/affiliate.ts`, `lib/r2.ts`, `lib/units.ts`, `lib/supabase/auth.ts`, `app/api/user/photo` resize pattern, `TryOnCard` visual language. Migration SQL lives in `fitsyou-web-app/DEVELOPMENT.md`.
+
+---
+
+### Wk 7 · Launch Prep ⬜ Not Started
 
 | Task | Effort | Status |
 |---|---|---|
-| Submit to Chrome Web Store *(target Wk 5, not Wk 6)* | Medium | ⬜ Not Started |
+| Submit to Chrome Web Store *(target early, review can take weeks)* | Medium | ⬜ Not Started |
 | Record before/after demo video for TikTok / Instagram Reel | Small | ⬜ Not Started |
 | Set up analytics — instrument activation funnel | Small | ⬜ Not Started |
 | Soft launch + post first organic video | Small | ⬜ Not Started |
@@ -407,4 +442,4 @@ PADDLE_WEBHOOK_SECRET=
 
 ---
 
-*Last updated: 2026-05-30 — Wk 5 complete (incl. dashboard CRUD). Wk 6 (launch prep) is next.*
+*Last updated: 2026-05-30 — Wk 5 complete (incl. dashboard CRUD). Wk 6 (Mix & Match — wishlist + wardrobe + fitting room) is next; launch prep moved to Wk 7.*
