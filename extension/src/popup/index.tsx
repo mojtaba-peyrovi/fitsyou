@@ -27,6 +27,25 @@ interface Profile {
   backdrop_category: string | null;
 }
 
+interface GenerateResult {
+  output_image_urls: string[];
+  preview_path?: string;
+  cached?: boolean;
+}
+
+async function loadPreviewBlob(path: string, token: string): Promise<string | null> {
+  try {
+    const res = await fetch(`${API_BASE}${path}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) return null;
+    const blob = await res.blob();
+    return URL.createObjectURL(blob);
+  } catch {
+    return null;
+  }
+}
+
 function storeName(url: string): string {
   try {
     return new URL(url).hostname.replace(/^www\./, '').split('.')[0];
@@ -43,7 +62,7 @@ async function callGenerate(
     product_title?: string | null;
     store_name?: string;
   }
-): Promise<{ output_image_urls: string[] } | { error: string }> {
+): Promise<GenerateResult | { error: string }> {
   const res = await fetch(`${API_BASE}/api/generate`, {
     method: 'POST',
     headers: {
@@ -65,6 +84,7 @@ function Popup() {
   const [status, setStatus] = useState<PopupState>('checking');
   const [message, setMessage] = useState('');
   const [currentTabUrl, setCurrentTabUrl] = useState('');
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
 
   async function checkAuth() {
     chrome.storage.local.get(['fitsyou_token'], async (items) => {
@@ -158,7 +178,7 @@ function Popup() {
         if ('error' in result) {
           if (result.error.includes('limit')) {
             setStatus('error');
-            setMessage('Monthly limit reached. Upgrade your plan.');
+            setMessage('Monthly limit reached. Upgrade your plan at fitsyou.live/dashboard.');
           } else {
             setStatus('error');
             setMessage(result.error);
@@ -166,6 +186,10 @@ function Popup() {
           return;
         }
 
+        const blobUrl = result.preview_path
+          ? await loadPreviewBlob(result.preview_path, fitsyou_token)
+          : null;
+        setPreviewUrl(blobUrl);
         setStatus('success');
         setMessage(response.productTitle ?? 'Try-on ready!');
       });
@@ -216,6 +240,10 @@ function Popup() {
         return;
       }
 
+      const blobUrl = result.preview_path
+        ? await loadPreviewBlob(result.preview_path, fitsyou_token)
+        : null;
+      setPreviewUrl(blobUrl);
       setStatus('success');
       setMessage('Try-on ready!');
     });
@@ -259,11 +287,18 @@ function Popup() {
 
       {status === 'success' && (
         <div>
-          <p style={{ color: '#16a34a', fontSize: '14px', marginBottom: '10px' }}>
+          {previewUrl && (
+            <img
+              src={previewUrl}
+              alt="Try-on preview"
+              style={{ width: '100%', borderRadius: '6px', marginBottom: '8px', display: 'block' }}
+            />
+          )}
+          <p style={{ color: '#16a34a', fontSize: '13px', marginBottom: '10px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             ✓ {message}
           </p>
           <button onClick={() => openTab('/dashboard')} style={btnStyle}>
-            View your try-ons
+            View all try-ons →
           </button>
         </div>
       )}
@@ -280,15 +315,17 @@ function Popup() {
       {status === 'manual' && (
         <div>
           <p style={hintStyle}>
-            Can't auto-detect product image. Take a screenshot of the item and upload it below.
-            Your profile photo is already saved — this is just the product.
+            Can't auto-detect the product image. Screenshot the item and upload it below.
           </p>
           <input
             type="file"
             accept="image/jpeg,image/png,image/webp"
             onChange={handleFileUpload}
-            style={{ fontSize: '12px', width: '100%' }}
+            style={{ fontSize: '12px', width: '100%', marginBottom: '8px' }}
           />
+          <button onClick={() => setStatus('idle')} style={{ ...btnStyle, background: '#555', marginTop: '6px' }}>
+            ← Back
+          </button>
         </div>
       )}
     </div>
