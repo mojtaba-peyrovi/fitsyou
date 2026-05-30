@@ -306,6 +306,7 @@ fitsyou-web/
 | Integrate Paddle billing + free/paid tier gating | Medium | ⬜ Not Started |
 | End-to-end flow testing + hardening on all priority sites | Medium | ⬜ Not Started |
 | Wire affiliate link tagging on saved product URLs | Small | ⬜ Not Started |
+| Full-body photo validation on upload (GPT-4o-mini vision check) | Small | ⬜ Not Started |
 
 #### Detail
 
@@ -317,6 +318,14 @@ fitsyou-web/
 **Affiliate links:** passive, no UX change. Tag product URLs with affiliate parameters on save.
 
 **Hardening:** run full flow on all 10 priority sites. Fix extraction edge cases, broken try-ons, UI bugs. Budget most of this week here — it will surface more issues than expected.
+
+**Full-body photo validation**
+- Fires in `POST /api/user/photo` before writing to R2 or Supabase
+- Send the uploaded image to GPT-4o-mini: *"Does this photo show a complete full-body shot of a person from head to toe, including feet? Answer yes or no and briefly explain if no."*
+- If no → return HTTP 400 with the model's reason; onboarding page shows it inline
+- If yes → proceed with upload as normal
+- Cost: ~$0.001 per upload, fires once per user at onboarding (not per try-on)
+- No ratio pre-filter — content-based check handles any orientation or framing
 
 ---
 
