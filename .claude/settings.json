@@ -32,7 +32,9 @@
       "Bash(node /tmp/test_fit2.mjs)",
       "Bash(git commit -m ' *)",
       "Bash(git push *)",
-      "Bash(git commit *)"
+      "Bash(git commit *)",
+      "Bash(git remote *)",
+      "Read(//tmp/**)"
     ],
     "additionalDirectories": [
       "c:\\Users\\mojta\\personal_projects\\fitsyou-web-app\\app\\api\\user\\photo",

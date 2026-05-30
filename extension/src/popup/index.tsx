@@ -35,11 +35,23 @@ interface ExtractResult {
 
 type FitVerdict = 'good' | 'borderline' | 'poor' | 'unknown';
 
+interface MeasurementComparison {
+  measurement: 'chest' | 'waist' | 'hips';
+  userValue: number | null;
+  rangeMin: number;
+  rangeMax: number;
+  fit: 'good' | 'borderline' | 'poor' | 'unknown';
+}
+
 interface FitResult {
   verdict: FitVerdict;
   recommended_size: string | null;
   reason: string;
   needs_measurements?: boolean;
+  details?: {
+    evaluatedSize: string;
+    comparisons: MeasurementComparison[];
+  };
 }
 
 interface Profile {
@@ -135,13 +147,41 @@ const FIT_BADGE: Record<FitVerdict, { label: string; bg: string; fg: string }> =
 
 function FitBadge({ fit, onAddMeasurements }: { fit: FitResult; onAddMeasurements: () => void }) {
   const style = FIT_BADGE[fit.verdict] ?? FIT_BADGE.unknown;
+
+  const getMeasurementIcon = (fit: string) => {
+    if (fit === 'good') return '✓';
+    if (fit === 'borderline') return '≈';
+    if (fit === 'poor') return '✗';
+    return '?';
+  };
+
   return (
     <div style={{ background: style.bg, color: style.fg, borderRadius: '6px', padding: '8px 10px', marginBottom: '8px' }}>
       <div style={{ fontSize: '13px', fontWeight: 700 }}>
         {style.label}
-        {fit.recommended_size ? ` · best size: ${fit.recommended_size}` : ''}
+        {fit.recommended_size ? ` · size ${fit.recommended_size}` : ''}
       </div>
       {fit.reason && <div style={{ fontSize: '12px', marginTop: '2px', lineHeight: 1.35 }}>{fit.reason}</div>}
+      {fit.details && fit.details.comparisons.length > 0 && (
+        <div style={{ fontSize: '11px', marginTop: '6px', borderTop: `1px solid ${style.fg}33`, paddingTop: '6px' }}>
+          <div style={{ fontWeight: 600, marginBottom: '3px' }}>Size {fit.details.evaluatedSize}:</div>
+          {fit.details.comparisons.map((comp) => (
+            <div key={comp.measurement} style={{ marginBottom: '2px', fontFamily: 'monospace' }}>
+              <span style={{ marginRight: '4px' }}>{getMeasurementIcon(comp.fit)}</span>
+              <span style={{ textTransform: 'capitalize', minWidth: '50px', display: 'inline-block' }}>
+                {comp.measurement}:
+              </span>
+              {comp.userValue !== null ? (
+                <span>
+                  {comp.userValue}cm vs {comp.rangeMin}-{comp.rangeMax}cm
+                </span>
+              ) : (
+                <span style={{ opacity: 0.7 }}>not provided</span>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
       {fit.needs_measurements && (
         <button
           onClick={onAddMeasurements}
