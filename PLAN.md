@@ -3,6 +3,8 @@
 > One sentence: **see it, try it on yourself, save it, decide.**
 > Board: [fitsyou.live — v1 Build Plan](https://mojtabapeyrovis-team.monday.com/boards/5097397427)
 
+> **Workflow rule:** after **every** task is completed, it MUST be marked done in **both** places — this PLAN.md file **and** the Monday.com board. Neither is the source of truth alone; they are kept in sync. Do not consider a task finished until both reflect it.
+
 ---
 
 ## Product Vision
@@ -299,14 +301,15 @@ fitsyou-web/
 
 ---
 
-### Wk 5 · Payments + Hardening 🔄 Up Next
+### Wk 5 · Payments + Hardening ✅ Complete
 
 | Task | Effort | Status |
 |---|---|---|
-| Integrate Paddle billing + free/paid tier gating | Medium | ⬜ Not Started |
-| End-to-end flow testing + hardening on all priority sites | Medium | ⬜ Not Started |
-| Wire affiliate link tagging on saved product URLs | Small | ⬜ Not Started |
-| Full-body photo validation on upload (GPT-4o-mini vision check) | Small | ⬜ Not Started |
+| Integrate Paddle billing + free/paid tier gating | Medium | ✅ Done |
+| End-to-end flow testing + hardening on all priority sites | Medium | ✅ Done |
+| Wire affiliate link tagging on saved product URLs | Small | ✅ Done |
+| Full-body photo validation on upload (GPT-4o-mini vision check) | Small | ✅ Done |
+| Fit check — scrape size chart, compare to user measurements, show verdict | Medium | ✅ Done |
 
 #### Detail
 
@@ -316,6 +319,8 @@ fitsyou-web/
 - Power €9.99/mo: 100 try-ons, priority generation
 
 **Affiliate links:** passive, no UX change. Tag product URLs with affiliate parameters on save.
+- ✅ `lib/affiliate.ts` — config-driven `tagProductUrl()` keyed by store hostname. Supports "param" (append query) and "awin" (deep-link wrap) modes. Ships with empty placeholders so URLs pass through untouched until a program goes live; flip on per store with a one-line config edit + env var (`AWIN_AFFILIATE_ID`).
+- Applied on save in `/api/generate`: the stored `product_url` (used by the dashboard "Buy →" link) is tagged. Tagging is idempotent, so it also serves as the cache key. Raw URL still used for product-image fetch referer.
 
 **Hardening:** run full flow on all 10 priority sites. Fix extraction edge cases, broken try-ons, UI bugs. Budget most of this week here — it will surface more issues than expected.
 
@@ -326,6 +331,14 @@ fitsyou-web/
 - If yes → proceed with upload as normal
 - Cost: ~$0.001 per upload, fires once per user at onboarding (not per try-on)
 - No ratio pre-filter — content-based check handles any orientation or framing
+- ✅ `lib/photo-validation.ts` — `validateFullBody()` calls `gpt-4o-mini` (JSON mode, `detail: "low"`). Wired into `POST /api/user/photo` for `kind === "body"` only (face close-ups exempt), after resize, before R2 upload. Returns 400 with the model's reason on failure; onboarding page already renders that inline. **Fails open** (allows upload) if `OPENAI_API_KEY` is missing or the call errors — only a clear "not full-body" verdict blocks.
+
+**Fit check (size chart → measurements → verdict)**
+- Tells the user whether an item is likely to fit *before* they buy, shown as a badge in the popup above the try-on preview: **Good fit / Borderline / Likely won't fit** (or *Fit unknown*), with a recommended size and one-line reason.
+- Collects the **core-5 measurements** (height, weight, chest, waist, hips) via a new **skippable** onboarding step `/onboarding/measurements` (flow is now photo → measurements → face → backdrop) and editable fields in the dashboard `ProfilePanel`. Stored as metric ints on `profiles`; the 5 fields were added to `POST /api/user/profile`.
+- ✅ `lib/fit-assessment.ts` — `assessFit()` calls `gpt-4o-mini` (JSON mode) to normalize messy chart text (cm/inch, S/M/L/numeric) and judge fit; `POST /api/fit` reads the user's measurements and returns `{ verdict, recommended_size, reason }`. **No try-on credit consumed.** **Fails open to `unknown`** on missing key/error, missing measurements (`needs_measurements: true`), or no chart found.
+- Extension content script scrapes the size-chart text + available/selected sizes (per-site + generic + hidden-modal selectors, scored to pick the real table); popup calls `/api/fit` in parallel with generation and never blocks the try-on if it fails.
+- ⚠️ Requires the `profiles` measurement-column migration in `DEVELOPMENT.md` to be run in Supabase. Chart scraping is best-effort — size guides behind un-clicked modals degrade gracefully to "Fit unknown".
 
 ---
 
@@ -391,4 +404,4 @@ PADDLE_WEBHOOK_SECRET=
 
 ---
 
-*Last updated: 2026-05-29 — Wk 3 complete. Wk 4 (generation pipeline) is next.*
+*Last updated: 2026-05-30 — Wk 5 complete (incl. fit check). Wk 6 (launch prep) is next.*
