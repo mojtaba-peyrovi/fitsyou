@@ -86,6 +86,113 @@ const SITE_SELECTORS = {
         'img[class*="product-detail"]',
     ],
 };
+// ── Size-chart selectors (tried first, per site) ─────────────────────────────
+// Size guides usually live in a modal that may or may not be in the DOM at
+// extraction time. We grab whatever is present; the backend tolerates misses.
+const SIZE_GUIDE_SELECTORS = {
+    'zara.com': ['[class*="size-guide"]', '[class*="measurements"]', '[data-qa-id*="size"]'],
+    'asos.com': ['[id*="sizeandfit"]', '[class*="size-guide"]', '[class*="sizeChart"]'],
+    'hm.com': ['[class*="size-guide"]', '[data-testid*="size-guide"]', '[class*="sizeGuide"]'],
+    'zalando.com': ['[class*="size-table"]', '[data-testid*="size"]', '[class*="sizeChart"]'],
+    'zalando.de': ['[class*="size-table"]', '[data-testid*="size"]', '[class*="sizeChart"]'],
+    'zalando.co.uk': ['[class*="size-table"]', '[data-testid*="size"]', '[class*="sizeChart"]'],
+    'mango.com': ['[class*="size-guide"]', '[class*="measurements"]', '[data-testid*="size"]'],
+};
+// Generic containers likely to hold a size/measurement table on any site.
+const GENERIC_SIZE_SELECTORS = [
+    '[class*="size-guide" i]',
+    '[class*="sizeguide" i]',
+    '[class*="size-chart" i]',
+    '[class*="sizechart" i]',
+    '[class*="measurement" i]',
+    '[id*="size-guide" i]',
+    '[id*="sizechart" i]',
+    '[data-testid*="size" i]',
+];
+const MAX_CHART_LEN = 4000;
+function normalizeText(el) {
+    return (el.innerText || el.textContent || '')
+        .replace(/\s+\n/g, '\n')
+        .replace(/\n{2,}/g, '\n')
+        .replace(/[ \t]{2,}/g, ' ')
+        .trim();
+}
+/** Pick the candidate whose text most looks like a size table (has digits + size words). */
+function scoreSizeChart(text) {
+    if (!text)
+        return 0;
+    const digits = (text.match(/\d/g) ?? []).length;
+    const hints = /\b(size|chest|bust|waist|hip|cm|inch|inches|length|small|medium|large|XS|XL)\b/i.test(text) ? 50 : 0;
+    return digits + hints;
+}
+function extractSizeChart() {
+    const hostname = location.hostname.replace(/^www\./, '');
+    const siteName = Object.keys(SIZE_GUIDE_SELECTORS).find((k) => hostname.includes(k));
+    const selectors = [...(siteName ? SIZE_GUIDE_SELECTORS[siteName] : []), ...GENERIC_SIZE_SELECTORS];
+    let best = null;
+    for (const selector of selectors) {
+        let nodes;
+        try {
+            nodes = document.querySelectorAll(selector);
+        }
+        catch {
+            continue; // skip selectors a given browser rejects (e.g. case-insensitive attr)
+        }
+        for (const node of Array.from(nodes)) {
+            const text = normalizeText(node);
+            if (text.length < 20)
+                continue;
+            const score = scoreSizeChart(text);
+            if (!best || score > best.score)
+                best = { text, score };
+        }
+    }
+    // Require some signal it's actually a size table, not a stray "size" class.
+    if (best && best.score >= 50)
+        return best.text.slice(0, MAX_CHART_LEN);
+    return undefined;
+}
+function extractSizes() {
+    const SIZE_SELECTORS = [
+        '[class*="size-selector"] button',
+        '[class*="size-selector"] li',
+        '[data-testid*="size"] button',
+        'button[class*="size" i]',
+        'select[name*="size" i] option',
+    ];
+    const sizes = [];
+    let selected;
+    for (const selector of SIZE_SELECTORS) {
+        let nodes;
+        try {
+            nodes = document.querySelectorAll(selector);
+        }
+        catch {
+            continue;
+        }
+        if (nodes.length === 0)
+            continue;
+        for (const node of Array.from(nodes)) {
+            const label = (node.textContent || '').trim();
+            if (!label || label.length > 12 || sizes.includes(label))
+                continue;
+            sizes.push(label);
+            const el = node;
+            const isSelected = el.getAttribute('aria-checked') === 'true' ||
+                el.getAttribute('aria-selected') === 'true' ||
+                node.selected === true ||
+                /\b(selected|active|checked)\b/i.test(el.className);
+            if (isSelected && !selected)
+                selected = label;
+        }
+        if (sizes.length)
+            break; // first selector that yields sizes wins
+    }
+    return {
+        availableSizes: sizes.length ? sizes.slice(0, 20) : undefined,
+        selectedSize: selected,
+    };
+}
 // ── Extraction layers ─────────────────────────────────────────────────────────
 function extractWithSiteSelectors() {
     const hostname = location.hostname.replace(/^www\./, '');
@@ -166,11 +273,15 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         sendResponse({ success: false });
         return;
     }
+    const { availableSizes, selectedSize } = extractSizes();
     sendResponse({
         success: true,
         imageUrl,
         productTitle: extractProductTitle(),
         productUrl: location.href,
+        sizeChartText: extractSizeChart(),
+        availableSizes,
+        selectedSize,
     });
 });
 

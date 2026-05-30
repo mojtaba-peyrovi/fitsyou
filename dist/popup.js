@@ -195,11 +195,40 @@ async function callGenerate(token, payload) {
     }
     return json;
 }
+async function callFit(token, payload) {
+    try {
+        const res = await fetch(`${API_BASE}/api/fit`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify(payload),
+        });
+        if (!res.ok)
+            return null;
+        return (await res.json());
+    }
+    catch {
+        return null; // fit check must never block the try-on flow
+    }
+}
+const FIT_BADGE = {
+    good: { label: 'Good fit', bg: '#dcfce7', fg: '#166534' },
+    borderline: { label: 'Borderline fit', bg: '#fef9c3', fg: '#854d0e' },
+    poor: { label: 'Likely won’t fit', bg: '#fee2e2', fg: '#991b1b' },
+    unknown: { label: 'Fit unknown', bg: '#f1f5f9', fg: '#475569' },
+};
+function FitBadge({ fit, onAddMeasurements }) {
+    const style = FIT_BADGE[fit.verdict] ?? FIT_BADGE.unknown;
+    return ((0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("div", { style: { background: style.bg, color: style.fg, borderRadius: '6px', padding: '8px 10px', marginBottom: '8px' }, children: [(0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("div", { style: { fontSize: '13px', fontWeight: 700 }, children: [style.label, fit.recommended_size ? ` · best size: ${fit.recommended_size}` : ''] }), fit.reason && (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("div", { style: { fontSize: '12px', marginTop: '2px', lineHeight: 1.35 }, children: fit.reason }), fit.needs_measurements && ((0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("button", { onClick: onAddMeasurements, style: { marginTop: '6px', background: 'none', border: 'none', padding: 0, color: style.fg, fontSize: '12px', fontWeight: 600, textDecoration: 'underline', cursor: 'pointer' }, children: "Add your measurements \u2192" }))] }));
+}
 function Popup() {
     const [status, setStatus] = (0,preact_hooks__WEBPACK_IMPORTED_MODULE_2__.useState)('checking');
     const [message, setMessage] = (0,preact_hooks__WEBPACK_IMPORTED_MODULE_2__.useState)('');
     const [currentTabUrl, setCurrentTabUrl] = (0,preact_hooks__WEBPACK_IMPORTED_MODULE_2__.useState)('');
     const [previewUrl, setPreviewUrl] = (0,preact_hooks__WEBPACK_IMPORTED_MODULE_2__.useState)(null);
+    const [fit, setFit] = (0,preact_hooks__WEBPACK_IMPORTED_MODULE_2__.useState)(null);
     async function checkAuth() {
         chrome.storage.local.get(['fitsyou_token'], async (items) => {
             const fitsyou_token = items['fitsyou_token'];
@@ -268,12 +297,20 @@ function Popup() {
                 return;
             }
             setStatus('generating');
+            setFit(null);
             chrome.storage.local.get(['fitsyou_token'], async (items) => {
                 const fitsyou_token = items['fitsyou_token'];
                 if (!fitsyou_token) {
                     setStatus('signed-out');
                     return;
                 }
+                // Fit check runs in parallel with generation; it's free and never blocks.
+                const fitPromise = callFit(fitsyou_token, {
+                    product_title: response.productTitle ?? null,
+                    size_chart_text: response.sizeChartText,
+                    available_sizes: response.availableSizes,
+                    selected_size: response.selectedSize,
+                });
                 const result = await callGenerate(fitsyou_token, {
                     product_url: tabUrl,
                     product_image_url: response.imageUrl,
@@ -295,6 +332,7 @@ function Popup() {
                     ? await loadPreviewBlob(result.preview_path, fitsyou_token)
                     : null;
                 setPreviewUrl(blobUrl);
+                setFit(await fitPromise);
                 setStatus('success');
                 setMessage(response.productTitle ?? 'Try-on ready!');
             });
@@ -351,7 +389,7 @@ function Popup() {
             setMessage('Try-on ready!');
         });
     }
-    return ((0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("div", { style: { padding: '16px', fontFamily: 'sans-serif' }, children: [(0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("div", { style: { fontWeight: 700, fontSize: '16px', marginBottom: '12px' }, children: "fitsyou" }), status === 'checking' && (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("p", { style: hintStyle, children: "Loading\u2026" }), status === 'signed-out' && ((0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("div", { children: [(0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("p", { style: hintStyle, children: "Sign in to start trying on clothes." }), (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("button", { onClick: () => openTab('/auth/extension'), style: btnStyle, children: "Sign in to fitsyou" })] })), status === 'needs-setup' && ((0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("div", { children: [(0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("p", { style: hintStyle, children: "Complete your profile to start trying on clothes." }), (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("button", { onClick: () => openTab('/onboarding/photo'), style: btnStyle, children: "Complete setup" })] })), status === 'idle' && ((0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("button", { onClick: handleTryOn, style: btnStyle, children: "Try this on" })), status === 'extracting' && (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("p", { style: hintStyle, children: "Finding product image\u2026" }), status === 'generating' && ((0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("p", { style: hintStyle, children: "Generating your try-on\u2026 this takes ~15 sec." })), status === 'success' && ((0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("div", { children: [previewUrl && ((0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("img", { src: previewUrl, alt: "Try-on preview", style: { width: '100%', borderRadius: '6px', marginBottom: '8px', display: 'block' } })), (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("p", { style: { color: '#16a34a', fontSize: '13px', marginBottom: '10px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }, children: ["\u2713 ", message] }), (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("button", { onClick: () => openTab('/dashboard'), style: btnStyle, children: "View all try-ons \u2192" })] })), status === 'error' && ((0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("div", { children: [(0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("p", { style: { color: '#dc2626', fontSize: '13px', marginBottom: '10px' }, children: message }), (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("button", { onClick: () => setStatus('idle'), style: { ...btnStyle, background: '#555' }, children: "Try again" })] })), status === 'manual' && ((0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("div", { children: [(0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("p", { style: hintStyle, children: "Can't auto-detect the product image. Screenshot the item and upload it below." }), (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("input", { type: "file", accept: "image/jpeg,image/png,image/webp", onChange: handleFileUpload, style: { fontSize: '12px', width: '100%', marginBottom: '8px' } }), (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("button", { onClick: () => setStatus('idle'), style: { ...btnStyle, background: '#555', marginTop: '6px' }, children: "\u2190 Back" })] }))] }));
+    return ((0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("div", { style: { padding: '16px', fontFamily: 'sans-serif' }, children: [(0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("div", { style: { fontWeight: 700, fontSize: '16px', marginBottom: '12px' }, children: "fitsyou" }), status === 'checking' && (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("p", { style: hintStyle, children: "Loading\u2026" }), status === 'signed-out' && ((0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("div", { children: [(0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("p", { style: hintStyle, children: "Sign in to start trying on clothes." }), (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("button", { onClick: () => openTab('/auth/extension'), style: btnStyle, children: "Sign in to fitsyou" })] })), status === 'needs-setup' && ((0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("div", { children: [(0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("p", { style: hintStyle, children: "Complete your profile to start trying on clothes." }), (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("button", { onClick: () => openTab('/onboarding/photo'), style: btnStyle, children: "Complete setup" })] })), status === 'idle' && ((0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("button", { onClick: handleTryOn, style: btnStyle, children: "Try this on" })), status === 'extracting' && (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("p", { style: hintStyle, children: "Finding product image\u2026" }), status === 'generating' && ((0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("p", { style: hintStyle, children: "Generating your try-on\u2026 this takes ~15 sec." })), status === 'success' && ((0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("div", { children: [previewUrl && ((0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("img", { src: previewUrl, alt: "Try-on preview", style: { width: '100%', borderRadius: '6px', marginBottom: '8px', display: 'block' } })), fit && (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)(FitBadge, { fit: fit, onAddMeasurements: () => openTab('/dashboard') }), (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("p", { style: { color: '#16a34a', fontSize: '13px', marginBottom: '10px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }, children: ["\u2713 ", message] }), (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("button", { onClick: () => openTab('/dashboard'), style: btnStyle, children: "View all try-ons \u2192" })] })), status === 'error' && ((0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("div", { children: [(0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("p", { style: { color: '#dc2626', fontSize: '13px', marginBottom: '10px' }, children: message }), (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("button", { onClick: () => setStatus('idle'), style: { ...btnStyle, background: '#555' }, children: "Try again" })] })), status === 'manual' && ((0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("div", { children: [(0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("p", { style: hintStyle, children: "Can't auto-detect the product image. Screenshot the item and upload it below." }), (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("input", { type: "file", accept: "image/jpeg,image/png,image/webp", onChange: handleFileUpload, style: { fontSize: '12px', width: '100%', marginBottom: '8px' } }), (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("button", { onClick: () => setStatus('idle'), style: { ...btnStyle, background: '#555', marginTop: '6px' }, children: "\u2190 Back" })] }))] }));
 }
 const btnStyle = {
     width: '100%',

@@ -19,6 +19,18 @@ interface ExtractResult {
   imageUrl?: string;
   productTitle?: string;
   productUrl?: string;
+  sizeChartText?: string;
+  availableSizes?: string[];
+  selectedSize?: string;
+}
+
+type FitVerdict = 'good' | 'borderline' | 'poor' | 'unknown';
+
+interface FitResult {
+  verdict: FitVerdict;
+  recommended_size: string | null;
+  reason: string;
+  needs_measurements?: boolean;
 }
 
 interface Profile {
@@ -80,11 +92,65 @@ async function callGenerate(
   return json as { output_image_urls: string[] };
 }
 
+async function callFit(
+  token: string,
+  payload: {
+    product_title?: string | null;
+    size_chart_text?: string;
+    available_sizes?: string[];
+    selected_size?: string;
+  }
+): Promise<FitResult | null> {
+  try {
+    const res = await fetch(`${API_BASE}/api/fit`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) return null;
+    return (await res.json()) as FitResult;
+  } catch {
+    return null; // fit check must never block the try-on flow
+  }
+}
+
+const FIT_BADGE: Record<FitVerdict, { label: string; bg: string; fg: string }> = {
+  good: { label: 'Good fit', bg: '#dcfce7', fg: '#166534' },
+  borderline: { label: 'Borderline fit', bg: '#fef9c3', fg: '#854d0e' },
+  poor: { label: 'Likely won’t fit', bg: '#fee2e2', fg: '#991b1b' },
+  unknown: { label: 'Fit unknown', bg: '#f1f5f9', fg: '#475569' },
+};
+
+function FitBadge({ fit, onAddMeasurements }: { fit: FitResult; onAddMeasurements: () => void }) {
+  const style = FIT_BADGE[fit.verdict] ?? FIT_BADGE.unknown;
+  return (
+    <div style={{ background: style.bg, color: style.fg, borderRadius: '6px', padding: '8px 10px', marginBottom: '8px' }}>
+      <div style={{ fontSize: '13px', fontWeight: 700 }}>
+        {style.label}
+        {fit.recommended_size ? ` · best size: ${fit.recommended_size}` : ''}
+      </div>
+      {fit.reason && <div style={{ fontSize: '12px', marginTop: '2px', lineHeight: 1.35 }}>{fit.reason}</div>}
+      {fit.needs_measurements && (
+        <button
+          onClick={onAddMeasurements}
+          style={{ marginTop: '6px', background: 'none', border: 'none', padding: 0, color: style.fg, fontSize: '12px', fontWeight: 600, textDecoration: 'underline', cursor: 'pointer' }}
+        >
+          Add your measurements →
+        </button>
+      )}
+    </div>
+  );
+}
+
 function Popup() {
   const [status, setStatus] = useState<PopupState>('checking');
   const [message, setMessage] = useState('');
   const [currentTabUrl, setCurrentTabUrl] = useState('');
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [fit, setFit] = useState<FitResult | null>(null);
 
   async function checkAuth() {
     chrome.storage.local.get(['fitsyou_token'], async (items) => {
@@ -163,10 +229,19 @@ function Popup() {
       }
 
       setStatus('generating');
+      setFit(null);
 
       chrome.storage.local.get(['fitsyou_token'], async (items) => {
         const fitsyou_token = items['fitsyou_token'] as string | undefined;
         if (!fitsyou_token) { setStatus('signed-out'); return; }
+
+        // Fit check runs in parallel with generation; it's free and never blocks.
+        const fitPromise = callFit(fitsyou_token, {
+          product_title: response.productTitle ?? null,
+          size_chart_text: response.sizeChartText,
+          available_sizes: response.availableSizes,
+          selected_size: response.selectedSize,
+        });
 
         const result = await callGenerate(fitsyou_token, {
           product_url: tabUrl,
@@ -190,6 +265,7 @@ function Popup() {
           ? await loadPreviewBlob(result.preview_path, fitsyou_token)
           : null;
         setPreviewUrl(blobUrl);
+        setFit(await fitPromise);
         setStatus('success');
         setMessage(response.productTitle ?? 'Try-on ready!');
       });
@@ -294,6 +370,7 @@ function Popup() {
               style={{ width: '100%', borderRadius: '6px', marginBottom: '8px', display: 'block' }}
             />
           )}
+          {fit && <FitBadge fit={fit} onAddMeasurements={() => openTab('/dashboard')} />}
           <p style={{ color: '#16a34a', fontSize: '13px', marginBottom: '10px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             ✓ {message}
           </p>
