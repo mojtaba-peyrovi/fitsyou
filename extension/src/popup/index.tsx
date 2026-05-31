@@ -72,7 +72,11 @@ interface WardrobeItem {
 
 function storeName(url: string): string {
   try {
-    return new URL(url).hostname.replace(/^www\./, '').split('.')[0];
+    const parts = new URL(url).hostname.split('.');
+    // Use the SLD (brand domain) so www2.hm.com → "hm", shop.zara.com → "zara"
+    const ccSldLike = new Set(['co', 'com', 'net', 'org', 'gov', 'edu', 'ac', 'ne', 'me']);
+    const sld = parts[parts.length - 2];
+    return (ccSldLike.has(sld) && parts.length >= 3 ? parts[parts.length - 3] : sld) ?? '';
   } catch {
     return '';
   }
