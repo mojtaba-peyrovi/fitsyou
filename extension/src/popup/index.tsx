@@ -230,6 +230,13 @@ function FitBadge({ fit, onAddMeasurements }: { fit: FitResult; onAddMeasurement
   );
 }
 
+function MenuIcon({ kind }: { kind: Menu }) {
+  const common = { width: 13, height: 13, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': 2, 'stroke-linecap': 'round' as const, 'stroke-linejoin': 'round' as const };
+  if (kind === 'home') return <svg {...common}><path d="M3 11.5 12 4l9 7.5M5 10v10h14V10" /></svg>;
+  if (kind === 'wishlist') return <svg {...common}><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z" /></svg>;
+  return <svg {...common}><path d="M3 7h18M3 7l2-3h14l2 3M3 7v13a1 1 0 0 0 1 1h16a1 1 0 0 0 1-1V7M12 7v14" /></svg>;
+}
+
 function Popup() {
   const [status, setStatus] = useState<PopupState>('checking');
   const [menu, setMenu] = useState<Menu>('home');
@@ -423,7 +430,8 @@ function Popup() {
           <div style={tabBarStyle}>
             {(['home', 'wishlist', 'wardrobe'] as Menu[]).map((m) => (
               <button key={m} onClick={() => setMenu(m)} style={{ ...tabStyle, ...(menu === m ? tabActiveStyle : {}) }}>
-                {m === 'home' ? 'Home' : m === 'wishlist' ? `Wishlist${wishlist.length ? ` (${wishlist.length})` : ''}` : `Wardrobe${wardrobe.length ? ` (${wardrobe.length})` : ''}`}
+                <MenuIcon kind={m} />
+                <span>{m === 'home' ? 'Home' : m === 'wishlist' ? `Wishlist${wishlist.length ? ` (${wishlist.length})` : ''}` : `Wardrobe${wardrobe.length ? ` (${wardrobe.length})` : ''}`}</span>
               </button>
             ))}
           </div>
@@ -548,8 +556,12 @@ const tabBarStyle: preact.JSX.CSSProperties = {
 
 const tabStyle: preact.JSX.CSSProperties = {
   flex: 1,
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  gap: '4px',
   padding: '7px 4px',
-  fontSize: '12px',
+  fontSize: '11px',
   fontWeight: 500,
   color: '#666',
   background: 'transparent',
