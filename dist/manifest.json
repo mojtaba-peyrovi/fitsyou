@@ -25,6 +25,9 @@
   "background": {
     "service_worker": "background.js"
   },
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; style-src 'self' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; object-src 'self'"
+  },
   "externally_connectable": {
     "matches": [
       "https://fitsyou-web.vercel.app/*",
