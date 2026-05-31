@@ -21,23 +21,30 @@ fitsyou is a lightweight Chrome extension + web profile that lets users see how 
 |---|---|
 | Try-on API | GPT Image 1.5 (`gpt-image-1.5`), medium quality, 1024×1024, real-time |
 | Extension | Manifest V3 + TypeScript + Preact |
-| Web app | Next.js on Vercel |
-| Auth + DB | Supabase (Postgres) |
-| Image storage | Cloudflare R2 |
+| Web app | **Next.js on Vercel** (existing app, kept) — Lovable design ported in, not adopted wholesale |
+| Auth + DB | Supabase (Postgres, EU West / Frankfurt) |
+| Image storage | Cloudflare R2 (bucket `fitsyou-outputs`) |
 | Payments | Paddle (EU VAT auto-handled) |
 | Inputs | Two only: user photo + product image. No three-input pipeline. |
 | Architecture | Fixed deterministic pipeline: extract → compose → save. No agentic AI, no LLM reasoning loop. |
 | Playwright worker | Deferred post-launch |
+| Try-on surfaces | **Both** extension popup (inline, never redirects) and fitsyou.live web app |
+| Mobile capture | URL paste (Phase 1) + Web Share Target PWA (Phase 2). Native app is post-traction only. |
+| Design system | Playfair Display + DM Sans + DM Mono; ink `#121212`, bone `#F5F2EC`, pink `#FF2E88` |
+| Design source | Lovable export (`fitsyou-frontend`, TanStack Start) is a **design reference only**. Its UI/tokens get ported into the existing Next.js app. Backend (Wk 3–6 APIs, Supabase, R2, Paddle) is kept as-is. |
 
 ---
 
 ## Pricing
 
-| Tier | Price | Try-ons | Watermark | Retention |
-|---|---|---|---|---|
-| Free | €0 | 5 / month | Yes | 7 days |
-| Pro | €4.99 / month | 20 / month | No | Permanent |
-| Power | €9.99 / month | 100 / month | No | Permanent + priority |
+| Tier | Price | Try-ons | Corner mark | Retention | Notes |
+|---|---|---|---|---|---|
+| Free | €0 | 5 / month | Yes | 7 days | View in-app only; no download |
+| Pro | €4.99 / month | 20 / month | Yes (branded) | Permanent | Clean logo-free download |
+| Power | €9.99 / month | 100 / month | Yes (branded) | Permanent + priority | — |
+| Atelier | €19.99 / month | Unlimited | Yes (branded) | Permanent + priority | Early feature access |
+
+> **Corner mark vs watermark:** all generated images carry a discreet bottom-right corner mark ("fits*you*" in brand colours). This is brand placement for growth, not copy protection. Pro+ users can download a clean, logo-free version. No diagonal/heavy watermarks on any tier.
 
 ---
 
@@ -345,7 +352,7 @@ fitsyou-web/
 
 ---
 
-### Wk 6 · Mix & Match — Wishlist + Wardrobe + Fitting Room ⬜ Not Started
+### Wk 6 · Mix & Match — Wishlist + Wardrobe + Fitting Room ✅ Complete
 
 > **Flow shift:** the extension's primary action changes from instant single-item try-on to
 > **Add to wishlist**. Users collect items from any retailer (Wishlist) and upload their own clothes
@@ -354,14 +361,14 @@ fitsyou-web/
 
 | # | Task | Effort | Status |
 |---|---|---|---|
-| 1 | Data model — `wishlist_items` + `wardrobe_items` + `outfits` tables + RLS + `profiles.currency` + Realtime; `lib/garments.ts` | Medium | ⬜ Not Started |
-| 2 | Wishlist API — `POST`/`GET`/`DELETE` (affiliate-tagged, stores fit snapshot) | Medium | ⬜ Not Started |
-| 3 | Wardrobe API — `POST`/`GET`/`DELETE` (R2 image upload) + `/api/image` allow-list | Medium | ⬜ Not Started |
-| 4 | Extension rework — replace "Try this on" with "Add to wishlist"; Wishlist + Wardrobe menus; Fitting Room launcher | Large | ⬜ Not Started |
-| 5 | Dashboard tabs (Try-ons \| Wishlist \| Wardrobe \| Fitting Room) + Supabase Realtime live updates + currency selector | Large | ⬜ Not Started |
-| 6 | Multi-garment generation — `/api/outfit`, N garments in one pass, cache by item refs, write `outfits` | Large | ⬜ Not Started |
-| 7 | Fitting Room builder UI — multi-select tray, generate, render composed look | Medium | ⬜ Not Started |
-| 8 | Buy-list + currency-aware hardcoded rewards teaser | Small | ⬜ Not Started |
+| 1 | Data model — `wishlist_items` + `wardrobe_items` + `outfits` tables + RLS + `profiles.currency` + Realtime; `lib/garments.ts` | Medium | ✅ Done |
+| 2 | Wishlist API — `POST`/`GET`/`DELETE` (affiliate-tagged, stores fit snapshot) | Medium | ✅ Done |
+| 3 | Wardrobe API — `POST`/`GET`/`DELETE` (R2 image upload) + `/api/image` allow-list | Medium | ✅ Done |
+| 4 | Extension rework — replace "Try this on" with "Add to wishlist"; Wishlist + Wardrobe menus; Fitting Room launcher | Large | ✅ Done |
+| 5 | Dashboard tabs (Try-ons \| Wishlist \| Wardrobe \| Fitting Room) + Supabase Realtime live updates + currency selector | Large | ✅ Done |
+| 6 | Multi-garment generation — `/api/outfit`, N garments in one pass, cache by item refs, write `outfits` | Large | ✅ Done |
+| 7 | Fitting Room builder UI — multi-select tray, generate, render composed look | Medium | ✅ Done |
+| 8 | Buy-list + currency-aware hardcoded rewards teaser | Small | ✅ Done |
 
 #### Detail
 
@@ -380,25 +387,55 @@ fitsyou-web/
 
 ---
 
-### Wk 7 · Launch Prep ⬜ Not Started
+### Wk 7 · Branding + Design + PWA + Launch Prep ⬜ Not Started
 
-| Task | Effort | Status |
-|---|---|---|
-| Submit to Chrome Web Store *(target early, review can take weeks)* | Medium | ⬜ Not Started |
-| Record before/after demo video for TikTok / Instagram Reel | Small | ⬜ Not Started |
-| Set up analytics — instrument activation funnel | Small | ⬜ Not Started |
-| Soft launch + post first organic video | Small | ⬜ Not Started |
+> **Authoritative spec:** `CLAUDE_CODE_HANDOVER_WK7_DESIGN.md` in the extension repo root, **with one decision reversed (2026-05-31):** the web app stays on **Next.js + Vercel**. Lovable's export is a *design reference*, not the deployed app — we port its UI/tokens into the existing Next.js app and keep the working Wk 3–6 backend. (Reason the handover gave for switching to Vite/Cloudflare — "Lovable outputs Vite" — only applied if we adopted Lovable's code wholesale, which we are not.) Still in force: try-on generation runs on **both** the extension popup (inline) **and** fitsyou.live (on saved items); no Tailwind in the extension.
+
+> **Lovable design reference:** `fitsyou-frontend` repo (TanStack Start, deployed preview at `fits-you.lovable.app`). Brand kit lives in `fitsyou-web-app/branding`.
+
+| # | Task | Effort | Status |
+|---|---|---|---|
+| 1 | Logo and wordmark design — wordmark, icon mark, all size exports | Medium | ✅ Done |
+| 2 | Port Lovable design into existing Next.js app — all screens (landing, dashboard, wishlist, profile, onboarding, login) | Large | ✅ Done |
+| 3 | ~~Switch web app stack → Vite/Cloudflare~~ **Cancelled** — keep Next.js/Vercel; port design instead | Medium | ❌ Cancelled |
+| 4 | Port Lovable popup design to Preact extension (strip Tailwind, scoped CSS) | Medium | ⬜ Not Started |
+| 5 | Mobile-optimise dashboard UI (responsive + touch-friendly) | Medium | ⬜ Not Started |
+| 6 | Convert fitsyou.live web app to PWA | Medium | ⬜ Not Started |
+| 7 | PWA icons, splash screen, and meta tags | Small | ⬜ Not Started |
+| 8 | Implement Web Share Target API (share sheet receiver) | Medium | ⬜ Not Started |
+| 9 | Add manual URL paste flow for mobile product capture | Small | ⬜ Not Started |
+| 10 | Wire try-on generation into extension popup (generate + display + save in-popup) | Large | ⬜ Not Started |
+| 11 | Wire try-on generation into web app (generate from saved wishlist items) | Medium | ⬜ Not Started |
+| 12 | Submit to Chrome Web Store *(target early, review can take weeks)* | Medium | ⬜ Not Started |
+| 13 | Set up analytics — instrument activation funnel | Small | ⬜ Not Started |
+| 14 | Record before/after demo video for TikTok / Instagram Reel | Small | ⬜ Not Started |
+| 15 | Soft launch + post first organic video | Small | ⬜ Not Started |
 
 #### Detail
 
-**Chrome Web Store:** ⚠️ SCHEDULE RISK — do this in Wk 5 if possible. Review can take 3 days to 3 weeks. Optimize listing for: "virtual try-on", "fashion try-on", "see clothes on me".
+**Brand kit (Done):** Wordmark: Playfair Display 'fits' upright + 'you' italic in shocking pink #FF2E88. Icon mark: italic 'y' in pink on ink #121212 rounded-rect. Three icon variants (dark/pink/light). Delivered: SVG wordmark (on-light + on-dark), SVG icons (3 variants), PNG exports at 16/32/48/128/192/512px, maskable icons, favicon.ico, apple-touch-icon. All assets in `fitsyou-brand-kit-assets.zip`.
+
+**Design port (Next.js):** The full UI was designed in Lovable (TanStack Start export, `fitsyou-frontend`) and is live at `fits-you.lovable.app` as a reference. We **port that design into the existing Next.js app** rather than adopting the Lovable codebase — the Next.js app already holds the working Wk 3–6 backend (APIs, Supabase, R2, Paddle) and that's the expensive half to reproduce. Plan: lift the design tokens (`tokens.css`: Playfair Display + DM Sans + DM Mono, pink #FF2E88, ink #121212, bone #F5F2EC), add Tailwind to the Next.js app, then restyle screen by screen (landing, dashboard/try-on grid, wishlist, profile, onboarding, login). Dark-brand/light-content split: nav + hero = ink, content = bone/white. All screens mobile-responsive. Before going live, strip Lovable template cruft (the "14-day money-back guarantee", "photoreal" → "realistic", "no app to install" phrasing).
+
+**Stack — DECISION REVERSED (2026-05-31):** We are **not** switching to Vite/Cloudflare. The Lovable export turned out to be a TanStack Start app with an empty (Lovable Cloud) backend; adopting it would mean reimplementing the entire Wk 3–6 backend as server functions — high risk for no real gain. The web app **stays on Next.js + Vercel** (keeping its working backend and Vercel auto-deploy). The Lovable repo is kept only as a design reference. The mobile/PWA layer (manifest, service worker, share target, URL paste) is built into the Next.js app instead.
+
+**Extension popup port:** Swap React imports for Preact h/Fragment, strip all Tailwind classes, replace with scoped CSS using shared design tokens. All popup states: ready (dark header, pink CTA), generating (spinner + progress bar), result (try-on images + save confirmation). Test in Chrome at 360px width.
+
+**Mobile + PWA:** Ensure 2-col grid, 44px touch targets, try-on works in mobile browser, buy links open in new tab. Test on iOS Safari and Android Chrome. Web manifest with name, icons, theme_color `#121212`, display: `standalone`. PWA icons from brand kit at 192×512 + maskable. Register service worker for offline shell caching. Web Share Target: `method POST`, `enctype multipart/form-data`, accepting `url` and `text` params; `/share-target` route auto-populates the add-to-wishlist flow.
+
+**Mobile URL paste fallback:** URL paste input on dashboard; backend fetches product image server-side (same extraction pipeline as extension: DOM → og:image → fallback). Show product preview before saving.
+
+**Try-on wiring — extension:** User clicks 'Try this on me' → extension sends user photo + scraped product image to generation endpoint → 2 try-on variants displayed inside the popup (never redirect to website) → saved to Supabase + R2. Corner mark (fitsyou wordmark) applied to every generated image.
+
+**Try-on wiring — web app:** Saved wishlist item → 'Try this on' → same generation endpoint → results displayed inline and saved to Supabase + R2. Primary mobile try-on flow: capture on desktop via extension, generate on phone via web app.
+
+**Chrome Web Store:** ⚠️ SCHEDULE RISK — submit as early as possible; review can take 3 days to 3 weeks. Optimize listing for: "virtual try-on", "fashion try-on", "see clothes on me".
+
+**Analytics (PostHog or equivalent):** track installs, profile completions, first try-on completions, conversion to paid. Key metric: **cost per activated user** (install + profile + ≥1 try-on).
 
 **Demo video:** primary acquisition channel. The wow moment (you in a Zara jacket) is inherently shareable. Keep it raw and real — not overproduced.
 
-**Analytics (PostHog or equivalent):** track installs, profile completions, first try-on completions, conversion to paid.
-Key metric: **cost per activated user** (install + profile + ≥1 try-on).
-
-**Soft launch:** post the organic video. Do not run paid ads yet — wait for organic signal first. Resist every feature request. The product does one thing.
+**Soft launch:** post the organic video. Do not run paid ads yet — wait for organic signal first. Resist every feature request.
 
 ---
 
@@ -442,4 +479,4 @@ PADDLE_WEBHOOK_SECRET=
 
 ---
 
-*Last updated: 2026-05-30 — Wk 5 complete (incl. dashboard CRUD). Wk 6 (Mix & Match — wishlist + wardrobe + fitting room) is next; launch prep moved to Wk 7.*
+*Last updated: 2026-05-31 — Wk 6 complete. Atelier tier added (€19.99/mo, unlimited). **Stack-switch reversed:** web app stays on Next.js + Vercel; the Lovable export (`fitsyou-frontend`, TanStack Start) is a design reference whose UI/tokens get ported into the existing app. Try-on generation runs on both the extension popup and the web app. Wk 7 spec in `CLAUDE_CODE_HANDOVER_WK7_DESIGN.md` (with the stack decision overridden here).*
