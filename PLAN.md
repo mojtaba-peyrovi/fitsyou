@@ -387,6 +387,27 @@ fitsyou-web/
 
 ---
 
+#### Wardrobe image preprocessing pipeline (added post-Wk 6)
+
+Every wardrobe photo is run through a three-step pipeline **before** being stored. The pipeline lives in `lib/preprocess.ts` and is called from `POST /api/wardrobe`.
+
+**Step 1 — Background removal**
+Provider: [Replicate](https://replicate.com) — model [`lucataco/remove-bg`](https://replicate.com/lucataco/remove-bg) (wraps **BRIA-RMBG-1.4**, a state-of-the-art segmentation model tuned for clothing and objects). Cost: ~$0.003 per image. The API call is a standard Replicate prediction: the image is sent as a base64 data URI, the model returns a URL pointing to a PNG with the background set to full alpha transparency. The Replicate Node SDK (`npm install replicate`) handles polling until the prediction completes.
+
+Env var required: `REPLICATE_API_TOKEN` (Vercel + `.env.local`). If the token is missing the step is skipped gracefully and the original image is passed through — nothing breaks, background just isn't removed.
+
+**Step 2 — Smart crop (auto-fit to square)**
+After background removal the garment sits on a transparent canvas that may have large empty borders. Sharp's `.trim({ threshold: 10 })` detects the bounding box of non-transparent pixels and removes the dead space. The app then computes a square canvas equal to the longer side of the trimmed garment × 1.20 (20% breathing room) and centers the garment on it using `.extend()`. The 20% rule adapts automatically: a tall dress gets extra horizontal air; wide-folded pants get extra vertical air — no manual tuning needed.
+
+**Step 3 — Resize + store as PNG**
+The square PNG is resized to max 1024×1024 (`fit: inside`, no upscaling) at compression level 8. Stored in R2 as `wardrobe/{user_id}/{ts}.png` (previously `.jpg`). Transparency is preserved so the try-on model receives a clean garment with no background noise.
+
+**Classification still uses JPEG:** `classifyGarment()` flattens the PNG to a white-background JPEG before sending to `gpt-4o-mini` (cheaper, and the model reads the garment more reliably without alpha).
+
+**Card display:** `WardrobeTab.tsx` uses `object-contain` (not `object-cover`) so the already-square transparent PNG fills the card perfectly against the bone-coloured background without any cropping.
+
+---
+
 ### Wk 7 · Branding + Design + PWA + Launch Prep ⬜ Not Started
 
 > **Authoritative spec:** `CLAUDE_CODE_HANDOVER_WK7_DESIGN.md` in the extension repo root, **with one decision reversed (2026-05-31):** the web app stays on **Next.js + Vercel**. Lovable's export is a *design reference*, not the deployed app — we port its UI/tokens into the existing Next.js app and keep the working Wk 3–6 backend. (Reason the handover gave for switching to Vite/Cloudflare — "Lovable outputs Vite" — only applied if we adopted Lovable's code wholesale, which we are not.) Still in force: try-on generation runs on **both** the extension popup (inline) **and** fitsyou.live (on saved items); no Tailwind in the extension.
@@ -444,6 +465,9 @@ fitsyou-web/
 ```env
 # OpenAI
 OPENAI_API_KEY=
+
+# Replicate (wardrobe bg removal — BRIA-RMBG-1.4 via lucataco/remove-bg)
+REPLICATE_API_TOKEN=
 
 # Supabase
 NEXT_PUBLIC_SUPABASE_URL=https://nzchqlmkquwqzsqdlidn.supabase.co

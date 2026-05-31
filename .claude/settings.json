@@ -34,7 +34,32 @@
       "Bash(git push *)",
       "Bash(git commit *)",
       "Bash(git remote *)",
-      "Read(//tmp/**)"
+      "Read(//tmp/**)",
+      "Bash(timeout 60 bash -c 'until curl -s http://localhost:3000 > /dev/null 2>&1; do sleep 1; done; echo \"Server ready\"')",
+      "Bash(chromium-cli --headless --screenshot /tmp/dashboard.png http://localhost:3000/dashboard)",
+      "PowerShell(curl -s http://localhost:3000/dashboard 2>&1)",
+      "PowerShell(head -20)",
+      "PowerShell(try { $response = Invoke-WebRequest -Uri \"http://localhost:3000/dashboard\" -TimeoutSec 5; Write-Host \"Dev server is running\"; $response.StatusCode } catch { Write-Host \"Dev server not responding\"; $_ })",
+      "Bash(node -e \"const s=require\\('./package.json'\\).scripts;console.log\\(JSON.stringify\\(s,null,1\\)\\)\")",
+      "PowerShell(npx tsc --noEmit -p tsconfig.json 2>&1)",
+      "PowerShell(npx tsc --noEmit; \"EXIT=$LASTEXITCODE\")",
+      "Bash(echo \"EXIT=$?\")",
+      "Bash(npx tsc *)",
+      "Bash(rm -f tsc_out.txt)",
+      "Bash(node trim_test.mjs)",
+      "PowerShell(node trim_test.mjs; \"EXIT=$LASTEXITCODE\")",
+      "mcp__claude_ai_monday_com__create_group",
+      "mcp__claude_ai_monday_com__all_monday_api",
+      "PowerShell(cd C:\\\\Users\\\\mojta\\\\personal_projects\\\\fitsyou-web-app; npx tsc --noEmit 2>&1 | Select-Object -First 40; Write-Output \"EXITCODE=$LASTEXITCODE\")",
+      "Bash(git checkout *)",
+      "Bash(cat > *)",
+      "PowerShell(git push -u origin feat/mix-and-match-wishlist-wardrobe 2>&1)",
+      "PowerShell(git remote get-url origin)",
+      "Bash(gh pr *)",
+      "PowerShell(Set-Location C:\\\\Users\\\\mojta\\\\personal_projects\\\\fitsyou; git checkout main -q; git checkout -b feat/fitting-room-polish 2>&1 | Select-Object -Last 1; \"ext: $\\(git branch --show-current\\)\")",
+      "mcp__claude_ai_monday_com__get_full_board_data",
+      "WebFetch(domain:fits-you.lovable.app)",
+      "Read(//c/Users/mojta/personal_projects/fitsyou-frontend/**)"
     ],
     "additionalDirectories": [
       "c:\\Users\\mojta\\personal_projects\\fitsyou-web-app\\app\\api\\user\\photo",
@@ -45,7 +70,9 @@
       "c:\\Users\\mojta\\personal_projects\\fitsyou-web-app\\app\\dashboard",
       "c:\\Users\\mojta\\personal_projects\\fitsyou-web-app\\app\\api\\generate",
       "c:\\Users\\mojta\\.claude\\projects\\c--Users-mojta-personal-projects-fitsyou\\memory",
-      "c:\\Users\\mojta\\personal_projects\\fitsyou-web-app"
+      "c:\\Users\\mojta\\personal_projects\\fitsyou-web-app",
+      "\\tmp",
+      "C:\\Users\\mojta\\personal_projects\\fitsyou-frontend"
     ]
   }
 }
