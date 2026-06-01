@@ -126,6 +126,16 @@ async function apiPost(token: string, path: string, body: unknown): Promise<{ ok
 
 const TIER_LIMITS: Record<string, number> = { free: 5, pro: 20, power: 100, atelier: Infinity };
 
+function toSentenceCase(s: string): string {
+  const t = s.trim();
+  if (!t) return t;
+  // Only normalize if the string is mostly uppercase (store like Zara uses ALL CAPS)
+  const upper = t.replace(/[^a-zA-Z]/g, '');
+  const ratio = upper.length > 0 ? (upper.split('').filter((c) => c === c.toUpperCase()).length / upper.length) : 0;
+  if (ratio < 0.7) return t; // already mixed case — leave it alone
+  return t.charAt(0).toUpperCase() + t.slice(1).toLowerCase();
+}
+
 const FIT_BADGE: Record<FitVerdict, { label: string; bg: string; fg: string }> = {
   good:      { label: 'Good fit',   bg: '#dcfce7', fg: '#166534' },
   borderline:{ label: 'Borderline', bg: '#fef9c3', fg: '#854d0e' },
@@ -180,12 +190,13 @@ function Toast({ msg, type }: { msg: string; type: 'success' | 'error' }) {
 
 // ─── Fitting Room (inline in popup) ──────────────────────────────────────────
 function FittingRoom({
-  wishlist, wardrobe, token, onOpenDashboard,
+  wishlist, wardrobe, token, onOpenDashboard, onTryOnSaved,
 }: {
   wishlist: WishlistItem[];
   wardrobe: WardrobeItem[];
   token: string;
   onOpenDashboard: () => void;
+  onTryOnSaved: () => void;
 }) {
   const [selected, setSelected] = useState<ItemRef[]>([]);
   const [phase, setPhase]       = useState<'idle' | 'generating' | 'done'>('idle');
@@ -249,7 +260,7 @@ function FittingRoom({
       product_url: first?.product_url ?? null,
       store_name: first?.store_name ?? null,
     });
-    if (res.ok) setSaved(true);
+    if (res.ok) { setSaved(true); onTryOnSaved(); }
     else setError(res.error ?? 'Save failed');
   }
 
@@ -258,7 +269,8 @@ function FittingRoom({
     const ref: ItemRef = { source, id: item.id };
     const on = isSelected(ref);
     const imgSrc = source === 'wishlist' ? (item as WishlistItem).product_image_url : (item as WardrobeItem).image_url;
-    const label = source === 'wishlist' ? (item as WishlistItem).product_title : (item as WardrobeItem).name;
+    const rawLabel = source === 'wishlist' ? (item as WishlistItem).product_title : (item as WardrobeItem).name;
+    const label = rawLabel ? toSentenceCase(rawLabel) : rawLabel;
     const sub   = source === 'wishlist' ? (item as WishlistItem).store_name : (item as WardrobeItem).category;
     return (
       <button
@@ -322,9 +334,10 @@ function FittingRoom({
               const item = ref.source === 'wishlist'
                 ? wishlist.find((w) => w.id === ref.id)
                 : wardrobe.find((w) => w.id === ref.id);
-              const label = item
+              const rawLabel = item
                 ? (ref.source === 'wishlist' ? (item as WishlistItem).product_title : (item as WardrobeItem).name)
-                : ref.id.slice(0, 6);
+                : null;
+              const label = rawLabel ? toSentenceCase(rawLabel) : (rawLabel ?? ref.id.slice(0, 6));
               return (
                 <span
                   key={`${ref.source}:${ref.id}`}
@@ -526,14 +539,15 @@ function Popup() {
     chrome.tabs.create({ url: url.toString() });
   }
 
-  async function extractProduct(): Promise<ExtractResult | null> {
+  async function extractProduct(): Promise<{ result: ExtractResult | null; tabUrl: string }> {
     const [t] = await chrome.tabs.query({ active: true, currentWindow: true });
-    if (!t.id) return null;
-    setCurrentTabUrl(t.url ?? '');
+    const tabUrl = t?.url ?? '';
+    setCurrentTabUrl(tabUrl);
+    if (!t?.id) return { result: null, tabUrl };
     return new Promise((resolve) => {
       chrome.tabs.sendMessage(t.id!, { type: 'EXTRACT_PRODUCT' }, (r: ExtractResult | undefined) => {
-        if (chrome.runtime.lastError || !r) { resolve(null); return; }
-        resolve(r);
+        if (chrome.runtime.lastError || !r) { resolve({ result: null, tabUrl }); return; }
+        resolve({ result: r, tabUrl });
       });
     });
   }
@@ -543,7 +557,7 @@ function Popup() {
     if (saveState === 'working') return;
     setSaveState('working');
 
-    const ext = await extractProduct();
+    const { result: ext, tabUrl } = await extractProduct();
     if (!ext) {
       setSaveState('idle');
       showToast('Refresh the page, then try again.', 'error');
@@ -574,11 +588,12 @@ function Popup() {
       if (fr.ok) fitResult = await fr.json() as FitResult;
     } catch { /* non-blocking */ }
 
+    const normalizedTitle = ext.productTitle ? toSentenceCase(ext.productTitle) : null;
     const res = await apiPost(tk, '/api/wishlist', {
-      product_url: currentTabUrl,
+      product_url: tabUrl,
       product_image_url: ext.imageUrl,
-      product_title: ext.productTitle ?? null,
-      store_name: storeName(currentTabUrl),
+      product_title: normalizedTitle,
+      store_name: storeName(tabUrl),
       available_sizes: ext.availableSizes,
       fit_verdict: fitResult?.verdict ?? null,
       recommended_size: fitResult?.recommended_size ?? null,
@@ -587,7 +602,7 @@ function Popup() {
     setSaveState('idle');
     if (!res.ok) { showToast(res.error ?? 'Save failed', 'error'); return; }
 
-    const name = ext.productTitle ? `"${ext.productTitle}"` : 'Item';
+    const name = normalizedTitle ? `"${normalizedTitle}"` : 'Item';
     const fitMsg = fitResult && fitResult.verdict !== 'unknown' ? ` · ${FIT_BADGE[fitResult.verdict].label}` : '';
     showToast(`${name} saved to wishlist${fitMsg}`);
     setListsLoaded(false);
@@ -776,7 +791,7 @@ function Popup() {
                         <div style={{ padding: '6px 8px 8px' }}>
                           {item.store_name && <StoreTag name={item.store_name} />}
                           <div style={{ fontSize: '11px', fontWeight: 600, color: C.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: '2px' }}>
-                            {item.product_title ?? 'Try-on'}
+                            {item.product_title ? toSentenceCase(item.product_title) : 'Try-on'}
                           </div>
                         </div>
                       </div>
@@ -812,7 +827,7 @@ function Popup() {
                       <div style={{ flex: 1, minWidth: 0 }}>
                         {item.store_name && <StoreTag name={item.store_name} />}
                         <div style={{ fontSize: '12px', fontWeight: 600, color: C.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: '2px' }}>
-                          {item.product_title ?? 'Untitled item'}
+                          {item.product_title ? toSentenceCase(item.product_title) : 'Untitled item'}
                         </div>
                         {item.fit_verdict && item.fit_verdict !== 'unknown' && (
                           <div style={{ fontSize: '10px', color: (FIT_BADGE[item.fit_verdict] ?? FIT_BADGE.unknown).fg, marginTop: '2px' }}>
@@ -878,6 +893,7 @@ function Popup() {
                   wardrobe={wardrobe}
                   token={token}
                   onOpenDashboard={() => openTab('/dashboard?tab=fitting-room')}
+                  onTryOnSaved={() => setListsLoaded(false)}
                 />
               )
             )}

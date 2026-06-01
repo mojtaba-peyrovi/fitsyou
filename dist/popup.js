@@ -225,6 +225,17 @@ async function apiPost(token, path, body) {
     }
 }
 const TIER_LIMITS = { free: 5, pro: 20, power: 100, atelier: Infinity };
+function toSentenceCase(s) {
+    const t = s.trim();
+    if (!t)
+        return t;
+    // Only normalize if the string is mostly uppercase (store like Zara uses ALL CAPS)
+    const upper = t.replace(/[^a-zA-Z]/g, '');
+    const ratio = upper.length > 0 ? (upper.split('').filter((c) => c === c.toUpperCase()).length / upper.length) : 0;
+    if (ratio < 0.7)
+        return t; // already mixed case — leave it alone
+    return t.charAt(0).toUpperCase() + t.slice(1).toLowerCase();
+}
 const FIT_BADGE = {
     good: { label: 'Good fit', bg: '#dcfce7', fg: '#166534' },
     borderline: { label: 'Borderline', bg: '#fef9c3', fg: '#854d0e' },
@@ -278,7 +289,7 @@ function Toast({ msg, type }) {
         }, children: [type === 'success' ? '✓' : '!', " ", msg] }));
 }
 // ─── Fitting Room (inline in popup) ──────────────────────────────────────────
-function FittingRoom({ wishlist, wardrobe, token, onOpenDashboard, }) {
+function FittingRoom({ wishlist, wardrobe, token, onOpenDashboard, onTryOnSaved, }) {
     const [selected, setSelected] = (0,preact_hooks__WEBPACK_IMPORTED_MODULE_2__.useState)([]);
     const [phase, setPhase] = (0,preact_hooks__WEBPACK_IMPORTED_MODULE_2__.useState)('idle');
     const [progress, setProgress] = (0,preact_hooks__WEBPACK_IMPORTED_MODULE_2__.useState)(0);
@@ -340,8 +351,10 @@ function FittingRoom({ wishlist, wardrobe, token, onOpenDashboard, }) {
             product_url: first?.product_url ?? null,
             store_name: first?.store_name ?? null,
         });
-        if (res.ok)
+        if (res.ok) {
             setSaved(true);
+            onTryOnSaved();
+        }
         else
             setError(res.error ?? 'Save failed');
     }
@@ -350,7 +363,8 @@ function FittingRoom({ wishlist, wardrobe, token, onOpenDashboard, }) {
         const ref = { source, id: item.id };
         const on = isSelected(ref);
         const imgSrc = source === 'wishlist' ? item.product_image_url : item.image_url;
-        const label = source === 'wishlist' ? item.product_title : item.name;
+        const rawLabel = source === 'wishlist' ? item.product_title : item.name;
+        const label = rawLabel ? toSentenceCase(rawLabel) : rawLabel;
         const sub = source === 'wishlist' ? item.store_name : item.category;
         return ((0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("button", { onClick: () => toggle(ref), style: {
                 width: '80px', flexShrink: 0, background: C.surface,
@@ -373,9 +387,10 @@ function FittingRoom({ wishlist, wardrobe, token, onOpenDashboard, }) {
                             const item = ref.source === 'wishlist'
                                 ? wishlist.find((w) => w.id === ref.id)
                                 : wardrobe.find((w) => w.id === ref.id);
-                            const label = item
+                            const rawLabel = item
                                 ? (ref.source === 'wishlist' ? item.product_title : item.name)
-                                : ref.id.slice(0, 6);
+                                : null;
+                            const label = rawLabel ? toSentenceCase(rawLabel) : (rawLabel ?? ref.id.slice(0, 6));
                             return ((0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("span", { style: {
                                     display: 'inline-flex', alignItems: 'center', gap: '5px',
                                     padding: '3px 8px 3px 10px', borderRadius: '100px',
@@ -472,16 +487,17 @@ function Popup() {
     }
     async function extractProduct() {
         const [t] = await chrome.tabs.query({ active: true, currentWindow: true });
-        if (!t.id)
-            return null;
-        setCurrentTabUrl(t.url ?? '');
+        const tabUrl = t?.url ?? '';
+        setCurrentTabUrl(tabUrl);
+        if (!t?.id)
+            return { result: null, tabUrl };
         return new Promise((resolve) => {
             chrome.tabs.sendMessage(t.id, { type: 'EXTRACT_PRODUCT' }, (r) => {
                 if (chrome.runtime.lastError || !r) {
-                    resolve(null);
+                    resolve({ result: null, tabUrl });
                     return;
                 }
-                resolve(r);
+                resolve({ result: r, tabUrl });
             });
         });
     }
@@ -490,7 +506,7 @@ function Popup() {
         if (saveState === 'working')
             return;
         setSaveState('working');
-        const ext = await extractProduct();
+        const { result: ext, tabUrl } = await extractProduct();
         if (!ext) {
             setSaveState('idle');
             showToast('Refresh the page, then try again.', 'error');
@@ -524,11 +540,12 @@ function Popup() {
                 fitResult = await fr.json();
         }
         catch { /* non-blocking */ }
+        const normalizedTitle = ext.productTitle ? toSentenceCase(ext.productTitle) : null;
         const res = await apiPost(tk, '/api/wishlist', {
-            product_url: currentTabUrl,
+            product_url: tabUrl,
             product_image_url: ext.imageUrl,
-            product_title: ext.productTitle ?? null,
-            store_name: storeName(currentTabUrl),
+            product_title: normalizedTitle,
+            store_name: storeName(tabUrl),
             available_sizes: ext.availableSizes,
             fit_verdict: fitResult?.verdict ?? null,
             recommended_size: fitResult?.recommended_size ?? null,
@@ -538,7 +555,7 @@ function Popup() {
             showToast(res.error ?? 'Save failed', 'error');
             return;
         }
-        const name = ext.productTitle ? `"${ext.productTitle}"` : 'Item';
+        const name = normalizedTitle ? `"${normalizedTitle}"` : 'Item';
         const fitMsg = fitResult && fitResult.verdict !== 'unknown' ? ` · ${FIT_BADGE[fitResult.verdict].label}` : '';
         showToast(`${name} saved to wishlist${fitMsg}`);
         setListsLoaded(false);
@@ -607,7 +624,7 @@ function Popup() {
                                     fontFamily: MONO, letterSpacing: '0.04em',
                                     textTransform: 'uppercase', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
                                 }, children: labels[k] }, k));
-                        }) }), (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("div", { style: { padding: '14px 16px 16px', maxHeight: '480px', overflowY: 'auto' }, children: [tab === 'tryons' && (!listsLoaded ? ((0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("div", { style: { display: 'flex', justifyContent: 'center', padding: '24px' }, children: (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)(Spinner, {}) })) : tryOns.length === 0 ? ((0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("div", { style: { textAlign: 'center', padding: '24px 0' }, children: [(0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("div", { style: { fontSize: '32px', marginBottom: '8px' }, children: "\uD83D\uDC57" }), (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("div", { style: { fontFamily: SERIF, fontSize: '17px', marginBottom: '6px' }, children: "No try-ons yet" }), (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("p", { style: { fontSize: '12px', color: C.muted, lineHeight: 1.5 }, children: "Build an outfit in the Fitting Room to see it here." })] })) : ((0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("div", { children: [(0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("div", { style: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }, children: tryOns.slice(0, 8).map((item) => ((0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("div", { style: { background: C.surface, borderRadius: '10px', border: `0.5px solid ${C.border}`, overflow: 'hidden' }, children: [item.output_image_urls?.[0] ? ((0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("div", { style: { position: 'relative' }, children: [(0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)(AuthImg, { src: item.output_image_urls[0], token: token, alt: item.product_title ?? 'Try-on', style: { width: '100%', height: '130px', objectFit: 'cover', display: 'block' } }), (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("div", { style: { position: 'absolute', bottom: '5px', right: '7px', fontFamily: SERIF, fontSize: '9px', color: C.surface, opacity: 0.9 }, children: ["fits", (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("em", { style: { color: C.pink, fontStyle: 'italic' }, children: "you" })] })] })) : ((0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("div", { style: { height: '130px', background: C.bone } })), (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("div", { style: { padding: '6px 8px 8px' }, children: [item.store_name && (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)(StoreTag, { name: item.store_name }), (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("div", { style: { fontSize: '11px', fontWeight: 600, color: C.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: '2px' }, children: item.product_title ?? 'Try-on' })] })] }, item.id))) }), (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("button", { onClick: () => openTab('/dashboard?tab=tryons'), style: { ...btnGhost, marginTop: '12px', width: '100%' }, children: "View all on dashboard \u2192" })] }))), tab === 'wishlist' && (!listsLoaded ? ((0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("div", { style: { display: 'flex', justifyContent: 'center', padding: '24px' }, children: (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)(Spinner, {}) })) : wishlist.length === 0 ? ((0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("div", { style: { textAlign: 'center', padding: '24px 0' }, children: [(0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("div", { style: { fontSize: '32px', marginBottom: '8px' }, children: "\u2661" }), (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("div", { style: { fontFamily: SERIF, fontSize: '17px', marginBottom: '6px' }, children: "Nothing saved yet" }), (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("p", { style: { fontSize: '12px', color: C.muted, lineHeight: 1.5 }, children: "Browse a fashion store and hit \"Save this item to wishlist\" above." })] })) : ((0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("div", { style: { display: 'flex', flexDirection: 'column', gap: '8px' }, children: [wishlist.map((item) => ((0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("div", { style: { background: C.surface, borderRadius: '10px', padding: '10px', border: `0.5px solid ${C.border}`, display: 'flex', gap: '10px', alignItems: 'center' }, children: [(0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)(AuthImg, { src: item.product_image_url, token: token, alt: item.product_title ?? 'Item', style: { width: '56px', height: '56px', borderRadius: '8px', objectFit: 'cover', flexShrink: 0 } }), (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("div", { style: { flex: 1, minWidth: 0 }, children: [item.store_name && (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)(StoreTag, { name: item.store_name }), (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("div", { style: { fontSize: '12px', fontWeight: 600, color: C.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: '2px' }, children: item.product_title ?? 'Untitled item' }), item.fit_verdict && item.fit_verdict !== 'unknown' && ((0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("div", { style: { fontSize: '10px', color: (FIT_BADGE[item.fit_verdict] ?? FIT_BADGE.unknown).fg, marginTop: '2px' }, children: [(FIT_BADGE[item.fit_verdict] ?? FIT_BADGE.unknown).label, item.recommended_size ? ` · ${item.recommended_size}` : ''] }))] })] }, item.id))), (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("button", { onClick: () => setTab('fitting-room'), style: { ...btnPink, marginTop: '4px' }, children: "Build an outfit in Fitting Room \u2192" })] }))), tab === 'wardrobe' && (!listsLoaded ? ((0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("div", { style: { display: 'flex', justifyContent: 'center', padding: '24px' }, children: (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)(Spinner, {}) })) : wardrobe.length === 0 ? ((0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("div", { style: { textAlign: 'center', padding: '24px 0' }, children: [(0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("div", { style: { fontSize: '32px', marginBottom: '8px' }, children: "\uD83D\uDC55" }), (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("div", { style: { fontFamily: SERIF, fontSize: '17px', marginBottom: '6px' }, children: "No wardrobe items" }), (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("p", { style: { fontSize: '12px', color: C.muted, lineHeight: 1.5, marginBottom: '16px' }, children: "Add your own clothes on the dashboard to mix them with wishlist items." }), (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("button", { onClick: () => openTab('/dashboard?tab=wardrobe'), style: btnInk, children: "Add your clothes \u2192" })] })) : ((0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("div", { children: [(0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("div", { style: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }, children: wardrobe.map((item) => ((0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("div", { style: { background: C.surface, borderRadius: '10px', border: `0.5px solid ${C.border}`, overflow: 'hidden' }, children: [(0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)(AuthImg, { src: item.image_url, token: token, alt: item.name ?? 'Item', style: { width: '100%', height: '110px', objectFit: 'contain', background: C.bone, display: 'block' } }), (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("div", { style: { padding: '6px 8px 8px' }, children: [item.category && (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)(StoreTag, { name: item.category }), (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("div", { style: { fontSize: '11px', fontWeight: 600, color: C.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: '2px' }, children: item.name ?? 'Untitled' })] })] }, item.id))) }), (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("button", { onClick: () => setTab('fitting-room'), style: { ...btnGhost, marginTop: '12px', width: '100%' }, children: "Go to Fitting Room \u2192" })] }))), tab === 'fitting-room' && (!listsLoaded ? ((0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("div", { style: { display: 'flex', justifyContent: 'center', padding: '24px' }, children: (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)(Spinner, {}) })) : ((0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)(FittingRoom, { wishlist: wishlist, wardrobe: wardrobe, token: token, onOpenDashboard: () => openTab('/dashboard?tab=fitting-room') })))] })] }))] }));
+                        }) }), (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("div", { style: { padding: '14px 16px 16px', maxHeight: '480px', overflowY: 'auto' }, children: [tab === 'tryons' && (!listsLoaded ? ((0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("div", { style: { display: 'flex', justifyContent: 'center', padding: '24px' }, children: (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)(Spinner, {}) })) : tryOns.length === 0 ? ((0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("div", { style: { textAlign: 'center', padding: '24px 0' }, children: [(0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("div", { style: { fontSize: '32px', marginBottom: '8px' }, children: "\uD83D\uDC57" }), (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("div", { style: { fontFamily: SERIF, fontSize: '17px', marginBottom: '6px' }, children: "No try-ons yet" }), (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("p", { style: { fontSize: '12px', color: C.muted, lineHeight: 1.5 }, children: "Build an outfit in the Fitting Room to see it here." })] })) : ((0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("div", { children: [(0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("div", { style: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }, children: tryOns.slice(0, 8).map((item) => ((0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("div", { style: { background: C.surface, borderRadius: '10px', border: `0.5px solid ${C.border}`, overflow: 'hidden' }, children: [item.output_image_urls?.[0] ? ((0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("div", { style: { position: 'relative' }, children: [(0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)(AuthImg, { src: item.output_image_urls[0], token: token, alt: item.product_title ?? 'Try-on', style: { width: '100%', height: '130px', objectFit: 'cover', display: 'block' } }), (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("div", { style: { position: 'absolute', bottom: '5px', right: '7px', fontFamily: SERIF, fontSize: '9px', color: C.surface, opacity: 0.9 }, children: ["fits", (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("em", { style: { color: C.pink, fontStyle: 'italic' }, children: "you" })] })] })) : ((0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("div", { style: { height: '130px', background: C.bone } })), (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("div", { style: { padding: '6px 8px 8px' }, children: [item.store_name && (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)(StoreTag, { name: item.store_name }), (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("div", { style: { fontSize: '11px', fontWeight: 600, color: C.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: '2px' }, children: item.product_title ? toSentenceCase(item.product_title) : 'Try-on' })] })] }, item.id))) }), (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("button", { onClick: () => openTab('/dashboard?tab=tryons'), style: { ...btnGhost, marginTop: '12px', width: '100%' }, children: "View all on dashboard \u2192" })] }))), tab === 'wishlist' && (!listsLoaded ? ((0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("div", { style: { display: 'flex', justifyContent: 'center', padding: '24px' }, children: (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)(Spinner, {}) })) : wishlist.length === 0 ? ((0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("div", { style: { textAlign: 'center', padding: '24px 0' }, children: [(0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("div", { style: { fontSize: '32px', marginBottom: '8px' }, children: "\u2661" }), (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("div", { style: { fontFamily: SERIF, fontSize: '17px', marginBottom: '6px' }, children: "Nothing saved yet" }), (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("p", { style: { fontSize: '12px', color: C.muted, lineHeight: 1.5 }, children: "Browse a fashion store and hit \"Save this item to wishlist\" above." })] })) : ((0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("div", { style: { display: 'flex', flexDirection: 'column', gap: '8px' }, children: [wishlist.map((item) => ((0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("div", { style: { background: C.surface, borderRadius: '10px', padding: '10px', border: `0.5px solid ${C.border}`, display: 'flex', gap: '10px', alignItems: 'center' }, children: [(0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)(AuthImg, { src: item.product_image_url, token: token, alt: item.product_title ?? 'Item', style: { width: '56px', height: '56px', borderRadius: '8px', objectFit: 'cover', flexShrink: 0 } }), (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("div", { style: { flex: 1, minWidth: 0 }, children: [item.store_name && (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)(StoreTag, { name: item.store_name }), (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("div", { style: { fontSize: '12px', fontWeight: 600, color: C.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: '2px' }, children: item.product_title ? toSentenceCase(item.product_title) : 'Untitled item' }), item.fit_verdict && item.fit_verdict !== 'unknown' && ((0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("div", { style: { fontSize: '10px', color: (FIT_BADGE[item.fit_verdict] ?? FIT_BADGE.unknown).fg, marginTop: '2px' }, children: [(FIT_BADGE[item.fit_verdict] ?? FIT_BADGE.unknown).label, item.recommended_size ? ` · ${item.recommended_size}` : ''] }))] })] }, item.id))), (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("button", { onClick: () => setTab('fitting-room'), style: { ...btnPink, marginTop: '4px' }, children: "Build an outfit in Fitting Room \u2192" })] }))), tab === 'wardrobe' && (!listsLoaded ? ((0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("div", { style: { display: 'flex', justifyContent: 'center', padding: '24px' }, children: (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)(Spinner, {}) })) : wardrobe.length === 0 ? ((0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("div", { style: { textAlign: 'center', padding: '24px 0' }, children: [(0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("div", { style: { fontSize: '32px', marginBottom: '8px' }, children: "\uD83D\uDC55" }), (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("div", { style: { fontFamily: SERIF, fontSize: '17px', marginBottom: '6px' }, children: "No wardrobe items" }), (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("p", { style: { fontSize: '12px', color: C.muted, lineHeight: 1.5, marginBottom: '16px' }, children: "Add your own clothes on the dashboard to mix them with wishlist items." }), (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("button", { onClick: () => openTab('/dashboard?tab=wardrobe'), style: btnInk, children: "Add your clothes \u2192" })] })) : ((0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("div", { children: [(0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("div", { style: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }, children: wardrobe.map((item) => ((0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("div", { style: { background: C.surface, borderRadius: '10px', border: `0.5px solid ${C.border}`, overflow: 'hidden' }, children: [(0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)(AuthImg, { src: item.image_url, token: token, alt: item.name ?? 'Item', style: { width: '100%', height: '110px', objectFit: 'contain', background: C.bone, display: 'block' } }), (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("div", { style: { padding: '6px 8px 8px' }, children: [item.category && (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)(StoreTag, { name: item.category }), (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("div", { style: { fontSize: '11px', fontWeight: 600, color: C.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: '2px' }, children: item.name ?? 'Untitled' })] })] }, item.id))) }), (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("button", { onClick: () => setTab('fitting-room'), style: { ...btnGhost, marginTop: '12px', width: '100%' }, children: "Go to Fitting Room \u2192" })] }))), tab === 'fitting-room' && (!listsLoaded ? ((0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("div", { style: { display: 'flex', justifyContent: 'center', padding: '24px' }, children: (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)(Spinner, {}) })) : ((0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)(FittingRoom, { wishlist: wishlist, wardrobe: wardrobe, token: token, onOpenDashboard: () => openTab('/dashboard?tab=fitting-room'), onTryOnSaved: () => setListsLoaded(false) })))] })] }))] }));
 }
 // ─── Style constants ──────────────────────────────────────────────────────────
 const btnPink = {
