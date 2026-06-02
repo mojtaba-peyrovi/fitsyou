@@ -446,15 +446,17 @@ function FittingRoom({
       {/* Action buttons */}
       {phase !== 'generating' && (
         <button
-          onClick={generate}
-          disabled={selected.length === 0}
+          onClick={phase === 'done' ? clearCanvas : generate}
+          disabled={phase !== 'done' && selected.length === 0}
           style={{
-            ...btnPink,
-            opacity: selected.length === 0 ? 0.4 : 1,
-            cursor: selected.length === 0 ? 'not-allowed' : 'pointer',
+            ...(phase === 'done' ? btnGhost : btnPink),
+            opacity: (phase !== 'done' && selected.length === 0) ? 0.4 : 1,
+            cursor: (phase !== 'done' && selected.length === 0) ? 'not-allowed' : 'pointer',
+            color: phase === 'done' ? C.ink : undefined,
+            borderColor: phase === 'done' ? C.border : undefined,
           }}
         >
-          ✦ {phase === 'done' ? 'Regenerate' : 'Generate the look'}
+          {phase === 'done' ? '✕ Clear Canvas' : '✦ Generate the look'}
         </button>
       )}
 
