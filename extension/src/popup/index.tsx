@@ -206,6 +206,12 @@ function FittingRoom({
   const [error, setError]       = useState('');
   const generatingRef = useRef(false);
 
+  function clearCanvas() {
+    generatingRef.current = false;
+    setSelected([]); setPhase('idle'); setProgress(0);
+    setResults([]); setSaved(false); setError('');
+  }
+
   const isSelected = (ref: ItemRef) => selected.some((s) => s.source === ref.source && s.id === ref.id);
 
   function toggle(ref: ItemRef) {
@@ -319,8 +325,18 @@ function FittingRoom({
           <div style={{ fontSize: '12px', fontWeight: 600, color: C.ink, fontFamily: MONO, letterSpacing: '0.06em', textTransform: 'uppercase' }}>
             Canvas
           </div>
-          <div style={{ fontFamily: MONO, fontSize: '10px', color: C.muted }}>
-            {selected.length} item{selected.length === 1 ? '' : 's'}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            {(selected.length > 0 || results.length > 0) && (
+              <button
+                onClick={clearCanvas}
+                style={{ background: 'none', border: 'none', padding: '0', cursor: 'pointer', fontFamily: MONO, fontSize: '10px', color: C.muted, textDecoration: 'underline' }}
+              >
+                Clear
+              </button>
+            )}
+            <div style={{ fontFamily: MONO, fontSize: '10px', color: C.muted }}>
+              {selected.length} item{selected.length === 1 ? '' : 's'}
+            </div>
           </div>
         </div>
 
@@ -884,8 +900,8 @@ function Popup() {
             )}
 
             {/* ── Fitting Room tab ── */}
-            {tab === 'fitting-room' && (
-              !listsLoaded ? (
+            <div style={{ display: tab === 'fitting-room' ? 'block' : 'none' }}>
+              {!listsLoaded ? (
                 <div style={{ display: 'flex', justifyContent: 'center', padding: '24px' }}><Spinner /></div>
               ) : (
                 <FittingRoom
@@ -895,8 +911,8 @@ function Popup() {
                   onOpenDashboard={() => openTab('/dashboard?tab=fitting-room')}
                   onTryOnSaved={() => setListsLoaded(false)}
                 />
-              )
-            )}
+              )}
+            </div>
 
           </div>
         </div>
