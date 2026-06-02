@@ -204,12 +204,39 @@ function FittingRoom({
   const [results, setResults]   = useState<string[]>([]);
   const [saved, setSaved]       = useState(false);
   const [error, setError]       = useState('');
-  const generatingRef = useRef(false);
+  const generatingRef  = useRef(false);
+  const [canvasReady, setCanvasReady] = useState(false);
+
+  // Restore canvas state from storage on mount (survives popup close/reopen)
+  useEffect(() => {
+    chrome.storage.local.get('fitsyou_canvas', (data) => {
+      const s = data['fitsyou_canvas'] as { selected?: ItemRef[]; results?: string[] } | undefined;
+      if (s?.results?.length) {
+        setSelected(s.selected ?? []);
+        setResults(s.results);
+        setPhase('done');
+      } else if (s?.selected?.length) {
+        setSelected(s.selected);
+      }
+      setCanvasReady(true);
+    });
+  }, []);
+
+  // Persist canvas state whenever selected items or results change
+  useEffect(() => {
+    if (!canvasReady) return;
+    if (selected.length === 0 && results.length === 0) {
+      chrome.storage.local.remove('fitsyou_canvas');
+    } else {
+      chrome.storage.local.set({ fitsyou_canvas: { selected, results } });
+    }
+  }, [canvasReady, selected, results]);
 
   function clearCanvas() {
     generatingRef.current = false;
     setSelected([]); setPhase('idle'); setProgress(0);
     setResults([]); setSaved(false); setError('');
+    chrome.storage.local.remove('fitsyou_canvas');
   }
 
   const isSelected = (ref: ItemRef) => selected.some((s) => s.source === ref.source && s.id === ref.id);
@@ -266,7 +293,7 @@ function FittingRoom({
       product_url: first?.product_url ?? null,
       store_name: first?.store_name ?? null,
     });
-    if (res.ok) { setSaved(true); onTryOnSaved(); }
+    if (res.ok) { setSaved(true); chrome.storage.local.remove('fitsyou_canvas'); onTryOnSaved(); }
     else setError(res.error ?? 'Save failed');
   }
 

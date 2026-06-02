@@ -297,6 +297,33 @@ function FittingRoom({ wishlist, wardrobe, token, onOpenDashboard, onTryOnSaved,
     const [saved, setSaved] = (0,preact_hooks__WEBPACK_IMPORTED_MODULE_2__.useState)(false);
     const [error, setError] = (0,preact_hooks__WEBPACK_IMPORTED_MODULE_2__.useState)('');
     const generatingRef = (0,preact_hooks__WEBPACK_IMPORTED_MODULE_2__.useRef)(false);
+    const [canvasReady, setCanvasReady] = (0,preact_hooks__WEBPACK_IMPORTED_MODULE_2__.useState)(false);
+    // Restore canvas state from storage on mount (survives popup close/reopen)
+    (0,preact_hooks__WEBPACK_IMPORTED_MODULE_2__.useEffect)(() => {
+        chrome.storage.local.get('fitsyou_canvas', (data) => {
+            const s = data['fitsyou_canvas'];
+            if (s?.results?.length) {
+                setSelected(s.selected ?? []);
+                setResults(s.results);
+                setPhase('done');
+            }
+            else if (s?.selected?.length) {
+                setSelected(s.selected);
+            }
+            setCanvasReady(true);
+        });
+    }, []);
+    // Persist canvas state whenever selected items or results change
+    (0,preact_hooks__WEBPACK_IMPORTED_MODULE_2__.useEffect)(() => {
+        if (!canvasReady)
+            return;
+        if (selected.length === 0 && results.length === 0) {
+            chrome.storage.local.remove('fitsyou_canvas');
+        }
+        else {
+            chrome.storage.local.set({ fitsyou_canvas: { selected, results } });
+        }
+    }, [canvasReady, selected, results]);
     function clearCanvas() {
         generatingRef.current = false;
         setSelected([]);
@@ -305,6 +332,7 @@ function FittingRoom({ wishlist, wardrobe, token, onOpenDashboard, onTryOnSaved,
         setResults([]);
         setSaved(false);
         setError('');
+        chrome.storage.local.remove('fitsyou_canvas');
     }
     const isSelected = (ref) => selected.some((s) => s.source === ref.source && s.id === ref.id);
     function toggle(ref) {
@@ -362,6 +390,7 @@ function FittingRoom({ wishlist, wardrobe, token, onOpenDashboard, onTryOnSaved,
         });
         if (res.ok) {
             setSaved(true);
+            chrome.storage.local.remove('fitsyou_canvas');
             onTryOnSaved();
         }
         else
