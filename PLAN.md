@@ -432,6 +432,8 @@ The square PNG is resized to max 1024×1024 (`fit: inside`, no upscaling) at com
 | 14 | Record before/after demo video for TikTok / Instagram Reel | Small | ⬜ Not Started |
 | 15 | Soft launch + post first organic video | Small | ⬜ Not Started |
 | 16 | Smart garment image selection — score candidates, prefer flat-lay over hero, on BOTH extension (DOM) and web link-paste (HTML + user override) | Small | ✅ Done |
+| 17 | Try-on garment isolation — prompt the generator to use ONLY the target garment, ignoring model + other items in a hero-shot reference | Small | ✅ Done |
+| 18 | Browserless headless-render fallback — fetch the real JS-rendered gallery (flat-lay) for SPA retailers on link-paste; activates when `BROWSERLESS_API_KEY` is set | Medium | ⬜ Code done, needs key + live verify |
 
 #### Detail
 
@@ -470,6 +472,10 @@ OPENAI_API_KEY=
 # Replicate (wardrobe bg removal — BRIA-RMBG-1.4 via lucataco/remove-bg)
 REPLICATE_API_TOKEN=
 
+# Browserless (headless-render fallback for link-paste flat-lay fetch; optional)
+BROWSERLESS_API_KEY=
+# BROWSERLESS_URL=https://production-sfo.browserless.io  # optional override
+
 # Supabase
 NEXT_PUBLIC_SUPABASE_URL=https://nzchqlmkquwqzsqdlidn.supabase.co
 NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=
@@ -504,4 +510,4 @@ PADDLE_WEBHOOK_SECRET=
 
 ---
 
-*Last updated: 2026-06-04 — Wk 7 in progress. Smart garment image selection implemented (Wk 7 task 16) on BOTH surfaces: (1) extension content script scores all rendered images by URL pattern + aspect ratio + DOM context; (2) web link-paste `/api/product-fetch` now collects all candidates from the page HTML (meta + JSON-LD + embedded galleries) via `lib/imageCandidates.ts`, conservatively auto-picks, and the WishlistTab preview shows an override thumbnail row so users can swap a model shot for the flat-lay. Wk 6 complete. Atelier tier added (€19.99/mo, unlimited). **Stack-switch reversed:** web app stays on Next.js + Vercel; the Lovable export (`fitsyou-frontend`, TanStack Start) is a design reference whose UI/tokens get ported into the existing app. Try-on generation runs on both the extension popup and the web app. Wk 7 spec in `CLAUDE_CODE_HANDOVER_WK7_DESIGN.md` (with the stack decision overridden here).*
+*Last updated: 2026-06-04 — Wk 7 in progress. Garment-image quality work (tasks 16–18): (16) smart selection on BOTH surfaces — extension content script scores rendered images by URL + aspect ratio + DOM context; web link-paste `/api/product-fetch` collects candidates from page HTML (`lib/imageCandidates.ts`) + WishlistTab override thumbnail row. (17) try-on prompt hardened in `/api/generate` + `/api/outfit` to apply ONLY the target garment and ignore the reference model + other items — fixes confused try-ons from hero-shot references regardless of source. (18) Browserless headless-render fallback (`lib/renderPage.ts`) wired into link-paste to fetch the real JS-rendered gallery on SPA retailers (Zara, H&M) where static HTML only exposes the hero `og:image`; graceful no-op until `BROWSERLESS_API_KEY` is set — code done, needs key + live verification. Wk 6 complete. Atelier tier added (€19.99/mo, unlimited). **Stack-switch reversed:** web app stays on Next.js + Vercel; the Lovable export (`fitsyou-frontend`, TanStack Start) is a design reference whose UI/tokens get ported into the existing app. Try-on generation runs on both the extension popup and the web app. Wk 7 spec in `CLAUDE_CODE_HANDOVER_WK7_DESIGN.md` (with the stack decision overridden here).*

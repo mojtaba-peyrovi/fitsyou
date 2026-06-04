@@ -47,6 +47,7 @@ This rule applies retroactively: if a session ends without documenting a new too
 | Paddle | Payments & subscriptions | `PADDLE_API_KEY`, `PADDLE_WEBHOOK_SECRET` |
 | OpenAI | GPT-4o-mini vision for full-body photo validation | `OPENAI_API_KEY` |
 | Replicate | Background removal for garment images | `REPLICATE_API_TOKEN` |
+| Browserless | Headless-Chrome render fallback for web link-paste — fetches the JS-rendered product gallery (flat-lay) on SPA retailers (Zara, H&M) where static HTML only exposes the hero `og:image` | `BROWSERLESS_API_KEY`, optional `BROWSERLESS_URL` |
 | Resend | Transactional email (signup confirmation, etc.) | Configured via Supabase SMTP settings — host `smtp.resend.com`, port `465`, username `resend`, password = Resend API key |
 | OpenStreetMap Nominatim | Free city autocomplete in onboarding backdrop step | No API key — public endpoint `nominatim.openstreetmap.org` |
 | Playwright | Responsive screenshot testing (dev only) | None — `scripts/shots*.mjs`, run locally |
