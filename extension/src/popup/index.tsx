@@ -46,6 +46,7 @@ interface Profile {
   photo_url: string | null;
   try_on_count_this_month?: number;
   subscription_tier?: string;
+  extension_installed?: boolean;
 }
 
 interface WishlistItem {
@@ -549,7 +550,17 @@ function Popup() {
         const limit = TIER_LIMITS[profile.subscription_tier ?? 'free'] ?? 5;
         setTriesLeft(Math.max(0, limit - (profile.try_on_count_this_month ?? 0)));
       }
-      setStatus(!profile?.photo_url ? 'needs-setup' : 'idle');
+      const isReady = !!profile?.photo_url;
+      setStatus(isReady ? 'idle' : 'needs-setup');
+
+      // Phone home on first idle — marks the "Install extension" checklist step on the web app
+      if (isReady && profile?.extension_installed === false) {
+        fetch(`${API_BASE}/api/user/profile`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${tk}` },
+          body: JSON.stringify({ extension_installed: true }),
+        }).catch(() => {});
+      }
     } catch { setStatus('signed-out'); }
   }
 
