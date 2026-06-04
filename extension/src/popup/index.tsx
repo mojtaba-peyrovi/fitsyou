@@ -80,6 +80,17 @@ interface TryOnItem {
 interface ItemRef { source: 'wishlist' | 'wardrobe'; id: string; }
 
 // ─── Utilities ───────────────────────────────────────────────────────────────
+const SUPPORTED_RETAILER_DOMAINS = [
+  'zara.com', 'asos.com', 'hm.com',
+  'zalando.com', 'zalando.de', 'zalando.co.uk', 'mango.com',
+];
+function isRetailerUrl(url: string): boolean {
+  try {
+    const host = new URL(url).hostname;
+    return SUPPORTED_RETAILER_DOMAINS.some((d) => host === d || host.endsWith('.' + d));
+  } catch { return false; }
+}
+
 function storeName(url: string): string {
   try {
     const parts = new URL(url).hostname.split('.');
@@ -539,6 +550,7 @@ function Popup() {
   const [userEmail, setUserEmail]     = useState('');
   const [userFaceUrl, setUserFaceUrl] = useState<string | null>(null);
   const [userPhotoUrl, setUserPhotoUrl] = useState<string | null>(null);
+  const [subscriptionTier, setSubscriptionTier] = useState<string>('free');
 
   // Lists
   const [wishlist, setWishlist]       = useState<WishlistItem[]>([]);
@@ -568,7 +580,9 @@ function Popup() {
       }
       const profile: Profile | null = await r.json();
       if (profile?.try_on_count_this_month !== undefined) {
-        const limit = TIER_LIMITS[profile.subscription_tier ?? 'free'] ?? 5;
+        const tier = profile.subscription_tier ?? 'free';
+        setSubscriptionTier(tier);
+        const limit = TIER_LIMITS[tier] ?? 5;
         setTriesLeft(Math.max(0, limit - (profile.try_on_count_this_month ?? 0)));
       }
       if (profile?.email) setUserEmail(profile.email);
@@ -640,7 +654,11 @@ function Popup() {
     const { result: ext, tabUrl } = await extractProduct();
     if (!ext) {
       setSaveState('idle');
-      showToast('Refresh the page, then try again.', 'error');
+      if (!isRetailerUrl(tabUrl)) {
+        showToast('fitsyou works on fashion sites: Zara, ASOS, H&M, Zalando & Mango. Visit a product page to add items.', 'error');
+      } else {
+        showToast('Refresh the page, then try again.', 'error');
+      }
       return;
     }
     if (!ext.success || !ext.imageUrl) {
@@ -745,6 +763,14 @@ function Popup() {
           <div style={{ fontFamily: MONO, fontSize: '10px', color: C.muted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
             {userEmail}
           </div>
+          <div style={{
+            fontFamily: MONO, fontSize: '8px', letterSpacing: '0.08em', textTransform: 'uppercase',
+            padding: '2px 6px', borderRadius: '4px', flexShrink: 0,
+            background: subscriptionTier === 'free' ? 'rgba(255,255,255,0.08)' : C.pink,
+            color: subscriptionTier === 'free' ? C.muted : C.surface,
+          }}>
+            {subscriptionTier}
+          </div>
           {triesLeft !== null && (
             <div style={{ fontFamily: MONO, fontSize: '10px', color: C.pink, letterSpacing: '0.06em', textTransform: 'uppercase', flexShrink: 0 }}>
               {triesLeft} tries left
@@ -840,7 +866,7 @@ function Popup() {
 
           {/* Tab bar */}
           <div style={{ display: 'flex', borderBottom: `1px solid ${C.border}`, background: C.surface }}>
-            {(['tryons', 'wishlist', 'wardrobe', 'fitting-room'] as TabKey[]).map((k) => {
+            {(['wishlist', 'fitting-room', 'wardrobe', 'tryons'] as TabKey[]).map((k) => {
               const labels: Record<TabKey, string> = {
                 tryons:         tryOns.length  ? `Try-ons (${tryOns.length})` : 'Try-ons',
                 wishlist:       wishlist.length ? `Wishlist (${wishlist.length})` : 'Wishlist',
