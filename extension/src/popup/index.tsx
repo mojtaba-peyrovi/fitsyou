@@ -44,6 +44,8 @@ interface FitResult {
 
 interface Profile {
   photo_url: string | null;
+  face_url?: string | null;
+  email?: string | null;
   try_on_count_this_month?: number;
   subscription_tier?: string;
   extension_installed?: boolean;
@@ -534,6 +536,9 @@ function Popup() {
   const [tab, setTab]                 = useState<TabKey>('wishlist');
   const [token, setToken]             = useState('');
   const [triesLeft, setTriesLeft]     = useState<number | null>(null);
+  const [userEmail, setUserEmail]     = useState('');
+  const [userFaceUrl, setUserFaceUrl] = useState<string | null>(null);
+  const [userPhotoUrl, setUserPhotoUrl] = useState<string | null>(null);
 
   // Lists
   const [wishlist, setWishlist]       = useState<WishlistItem[]>([]);
@@ -566,6 +571,9 @@ function Popup() {
         const limit = TIER_LIMITS[profile.subscription_tier ?? 'free'] ?? 5;
         setTriesLeft(Math.max(0, limit - (profile.try_on_count_this_month ?? 0)));
       }
+      if (profile?.email) setUserEmail(profile.email);
+      if (profile?.face_url !== undefined) setUserFaceUrl(profile.face_url ?? null);
+      if (profile?.photo_url !== undefined) setUserPhotoUrl(profile.photo_url ?? null);
       const isReady = !!profile?.photo_url;
       setStatus(isReady ? 'idle' : 'needs-setup');
 
@@ -676,7 +684,7 @@ function Popup() {
 
     const name = normalizedTitle ? `"${normalizedTitle}"` : 'Item';
     const fitMsg = fitResult && fitResult.verdict !== 'unknown' ? ` · ${FIT_BADGE[fitResult.verdict].label}` : '';
-    showToast(`${name} saved to wishlist${fitMsg}`);
+    showToast(`${name} saved${fitMsg} — close & keep browsing`);
     setListsLoaded(false);
     setTab('wishlist');
   }
@@ -712,16 +720,38 @@ function Popup() {
     <div style={{ width: '360px', fontFamily: SANS, background: C.bone, color: C.ink }}>
 
       {/* Header */}
-      <div style={{ background: C.ink, padding: '14px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+      <div style={{ background: C.ink, padding: '12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div style={{ fontFamily: SERIF, fontSize: '22px', color: C.bone, lineHeight: 1 }}>
           fits<em style={{ color: C.pink, fontStyle: 'italic' }}>you</em>
         </div>
-        {triesLeft !== null && (
-          <div style={{ fontFamily: MONO, fontSize: '10px', color: C.pink, letterSpacing: '0.06em', textTransform: 'uppercase' }}>
-            {triesLeft} tries left
-          </div>
-        )}
+        <button
+          onClick={() => window.close()}
+          title="Close"
+          style={{ background: 'none', border: 'none', padding: '4px 6px', cursor: 'pointer', color: C.muted, fontSize: '18px', lineHeight: 1 }}
+        >×</button>
       </div>
+
+      {/* User identity bar — shown when signed in */}
+      {status === 'idle' && (
+        <div style={{ background: C.ink, borderTop: `0.5px solid rgba(255,255,255,0.08)`, padding: '8px 16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+          {(userFaceUrl ?? userPhotoUrl) ? (
+            <AuthImg
+              src={userFaceUrl ?? userPhotoUrl} token={token} alt="You"
+              style={{ width: '22px', height: '22px', borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }}
+            />
+          ) : (
+            <div style={{ width: '22px', height: '22px', borderRadius: '50%', background: 'rgba(255,255,255,0.1)', flexShrink: 0 }} />
+          )}
+          <div style={{ fontFamily: MONO, fontSize: '10px', color: C.muted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
+            {userEmail}
+          </div>
+          {triesLeft !== null && (
+            <div style={{ fontFamily: MONO, fontSize: '10px', color: C.pink, letterSpacing: '0.06em', textTransform: 'uppercase', flexShrink: 0 }}>
+              {triesLeft} tries left
+            </div>
+          )}
+        </div>
+      )}
 
       {/* ── Auth screens ── */}
       {status === 'checking' && (
@@ -733,12 +763,21 @@ function Popup() {
       {status === 'signed-out' && (
         <div style={{ padding: '24px 16px', textAlign: 'center' }}>
           <div style={{ fontFamily: SERIF, fontSize: '22px', marginBottom: '8px' }}>
-            Welcome to fits<em style={{ color: C.pink, fontStyle: 'italic' }}>you</em>
+            Try clothes on<br />before you buy
           </div>
           <p style={{ fontSize: '13px', color: C.muted, marginBottom: '20px', lineHeight: 1.5 }}>
-            Sign in to try clothes on yourself and save looks you love.
+            Create a free account on fitsyou.live first, then come back to use the extension.
           </p>
-          <button onClick={() => openTab('/auth/extension')} style={btnPink}>Sign in to fitsyou</button>
+          <button onClick={() => openTab('/auth/extension')} style={btnPink}>Create free account</button>
+          <p style={{ fontSize: '11px', color: C.muted, marginTop: '10px', lineHeight: 1.4 }}>
+            Already have an account?{' '}
+            <button
+              onClick={() => openTab('/auth/extension')}
+              style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: C.pinkDark, fontFamily: SANS, fontSize: '11px', textDecoration: 'underline' }}
+            >
+              Sign in →
+            </button>
+          </p>
         </div>
       )}
 
@@ -891,7 +930,11 @@ function Popup() {
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                   {wishlist.map((item) => (
-                    <div key={item.id} style={{ background: C.surface, borderRadius: '10px', padding: '10px', border: `0.5px solid ${C.border}`, display: 'flex', gap: '10px', alignItems: 'center' }}>
+                    <div
+                      key={item.id}
+                      onClick={() => item.product_url && chrome.tabs.create({ url: item.product_url })}
+                      style={{ background: C.surface, borderRadius: '10px', padding: '10px', border: `0.5px solid ${C.border}`, display: 'flex', gap: '10px', alignItems: 'center', cursor: item.product_url ? 'pointer' : 'default' }}
+                    >
                       <AuthImg
                         src={item.product_image_url} token={token} alt={item.product_title ?? 'Item'}
                         style={{ width: '56px', height: '56px', borderRadius: '8px', objectFit: 'cover', flexShrink: 0 }}
@@ -906,6 +949,9 @@ function Popup() {
                             {(FIT_BADGE[item.fit_verdict] ?? FIT_BADGE.unknown).label}
                             {item.recommended_size ? ` · ${item.recommended_size}` : ''}
                           </div>
+                        )}
+                        {item.product_url && (
+                          <div style={{ fontSize: '10px', color: C.faint, marginTop: '2px' }}>Tap to open →</div>
                         )}
                       </div>
                     </div>
