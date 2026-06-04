@@ -531,7 +531,7 @@ function FittingRoom({
 // ─── Main popup ───────────────────────────────────────────────────────────────
 function Popup() {
   const [status, setStatus]           = useState<PopupState>('checking');
-  const [tab, setTab]                 = useState<TabKey>('tryons');
+  const [tab, setTab]                 = useState<TabKey>('wishlist');
   const [token, setToken]             = useState('');
   const [triesLeft, setTriesLeft]     = useState<number | null>(null);
 
