@@ -377,16 +377,33 @@ function FittingRoom({ wishlist, wardrobe, token, onOpenDashboard, onTryOnSaved,
         if (results.length === 0)
             return;
         const tk = (await getToken()) ?? token;
-        const wishItems = selected
-            .filter((r) => r.source === 'wishlist')
-            .map((r) => wishlist.find((w) => w.id === r.id))
-            .filter(Boolean);
-        const first = wishItems[0];
+        const outfitItems = selected.map((ref) => {
+            if (ref.source === 'wishlist') {
+                const w = wishlist.find((w) => w.id === ref.id);
+                return {
+                    label: w?.product_title ?? 'Item',
+                    store: w?.store_name ?? null,
+                    url: w?.product_url ?? null,
+                    image: w?.product_image_url ?? null,
+                };
+            }
+            else {
+                const w = wardrobe.find((w) => w.id === ref.id);
+                return {
+                    label: w?.name ?? 'Wardrobe item',
+                    store: null,
+                    url: null,
+                    image: w?.image_url ?? null,
+                };
+            }
+        });
+        const firstWithUrl = outfitItems.find((i) => i.url);
         const res = await apiPost(tk, '/api/try-ons', {
             output_image_urls: results,
-            product_title: `Outfit · ${selected.length} item${selected.length === 1 ? '' : 's'}`,
-            product_url: first?.product_url ?? null,
-            store_name: first?.store_name ?? null,
+            product_title: outfitItems.map((i) => i.label).join(', '),
+            product_url: firstWithUrl?.url ?? null,
+            store_name: firstWithUrl?.store ?? null,
+            outfit_items: outfitItems,
         });
         if (res.ok) {
             setSaved(true);
@@ -490,7 +507,16 @@ function Popup() {
                 const limit = TIER_LIMITS[profile.subscription_tier ?? 'free'] ?? 5;
                 setTriesLeft(Math.max(0, limit - (profile.try_on_count_this_month ?? 0)));
             }
-            setStatus(!profile?.photo_url ? 'needs-setup' : 'idle');
+            const isReady = !!profile?.photo_url;
+            setStatus(isReady ? 'idle' : 'needs-setup');
+            // Phone home on first idle — marks the "Install extension" checklist step on the web app
+            if (isReady && profile?.extension_installed === false) {
+                fetch(`${API_BASE}/api/user/profile`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${tk}` },
+                    body: JSON.stringify({ extension_installed: true }),
+                }).catch(() => { });
+            }
         }
         catch {
             setStatus('signed-out');
