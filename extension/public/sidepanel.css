@@ -1,0 +1,12 @@
+/* Side panel overrides — removes the fixed popup width and enables scrolling */
+body {
+  width: 100%;
+  min-height: 100vh;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+/* Let the main app container fill the full panel height */
+#app {
+  min-height: 100vh;
+}

@@ -1,11 +1,12 @@
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 body {
+  overflow: hidden;
   width: 360px;
   min-height: 120px;
-  font-family: 'DM Sans', system-ui, sans-serif;
-  background: #F5F2EC;
-  color: #121212;
+  font-family: 'Archivo', system-ui, sans-serif;
+  background: #EEF1EE;
+  color: #161616;
   -webkit-font-smoothing: antialiased;
 }
 
@@ -20,4 +21,4 @@ body {
 
 ::-webkit-scrollbar { width: 3px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: #C4C0BA; border-radius: 2px; }
+::-webkit-scrollbar-thumb { background: #9FA8A3; border-radius: 2px; }

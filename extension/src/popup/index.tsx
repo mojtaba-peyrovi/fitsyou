@@ -3,21 +3,29 @@ import { useState, useEffect, useRef } from 'preact/hooks';
 
 const API_BASE = 'https://fitsyou-web.vercel.app';
 
-// ─── Brand tokens ─────────────────────────────────────────────────────────────
+// ─── Brand tokens — v3 "Soft Cool Stone" ─────────────────────────────────────
 const C = {
-  pink:      '#FF2E88',
-  pinkDark:  '#D1246E',
-  pinkLight: '#FFE0ED',
-  ink:       '#121212',
-  bone:      '#F5F2EC',
-  surface:   '#FFFFFF',
-  muted:     '#9A9690',
-  faint:     '#C4C0BA',
-  border:    'rgba(18,18,18,0.10)',
+  pink:    '#FF2E88',
+  berry:   '#C41E63',
+  blush:   '#F8D7E4',
+  ink:     '#161616',
+  mist:    '#EEF1EE',
+  cloud:   '#FAFBFA',
+  stone:   '#D8DEDB',
+  ash:     '#9FA8A3',
+  slate:   '#5D6560',
+  border:  'rgba(22,22,22,0.14)',
+  // backward-compat aliases (updated to v3 values)
+  pinkDark:  '#C41E63',
+  pinkLight: '#F8D7E4',
+  bone:      '#EEF1EE',
+  surface:   '#FAFBFA',
+  muted:     '#5D6560',
+  faint:     '#9FA8A3',
 };
 const SERIF = "'Playfair Display', Georgia, serif";
-const SANS  = "'DM Sans', system-ui, sans-serif";
-const MONO  = "'DM Mono', monospace";
+const SANS  = "'Archivo', system-ui, sans-serif";
+const MONO  = "'Archivo', system-ui, sans-serif";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type PopupState = 'checking' | 'signed-out' | 'needs-setup' | 'idle' | 'manual';
@@ -194,7 +202,7 @@ function Toast({ msg, type }: { msg: string; type: 'success' | 'error' }) {
     <div style={{
       background: type === 'success' ? '#dcfce7' : '#fee2e2',
       color: type === 'success' ? '#166534' : '#991b1b',
-      borderRadius: '8px', padding: '8px 12px', fontSize: '12px',
+      borderRadius: '0', padding: '8px 12px', fontSize: '12px',
       fontWeight: 600, marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '6px',
     }}>
       {type === 'success' ? '✓' : '!'} {msg}
@@ -342,7 +350,7 @@ function FittingRoom({
         style={{
           width: '80px', flexShrink: 0, background: C.surface,
           border: `${on ? 1.5 : 0.5}px solid ${on ? C.pink : C.border}`,
-          borderRadius: '10px', overflow: 'hidden', cursor: 'pointer',
+          borderRadius: '0', overflow: 'hidden', cursor: 'pointer',
           textAlign: 'left', padding: 0, position: 'relative',
         }}
       >
@@ -374,8 +382,8 @@ function FittingRoom({
 
       {/* Canvas */}
       <div style={{
-        background: 'linear-gradient(135deg, #f3ece2 0%, #e8dccb 50%, #d9c8b0 100%)',
-        borderRadius: '14px', padding: '14px', minHeight: '80px',
+        background: C.stone,
+        borderRadius: '0', padding: '14px', minHeight: '80px',
         display: 'flex', flexDirection: 'column', gap: '8px',
       }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -454,13 +462,13 @@ function FittingRoom({
           gap: '6px',
         }}>
           {results.map((url, i) => (
-            <div key={i} style={{ position: 'relative', borderRadius: '10px', overflow: 'hidden' }}>
+            <div key={i} style={{ position: 'relative', borderRadius: '0', overflow: 'hidden' }}>
               <AuthImg
                 src={url} token={token} alt={`Look ${i + 1}`}
                 style={{ width: '100%', height: results.length === 1 ? '260px' : '160px', objectFit: 'cover', display: 'block' }}
               />
-              <div style={{ position: 'absolute', bottom: '6px', right: '8px', fontFamily: SERIF, fontSize: '11px', color: C.surface, opacity: 0.92, textShadow: '0 1px 3px rgba(0,0,0,0.5)' }}>
-                fits<em style={{ color: C.pink, fontStyle: 'italic' }}>you</em>
+              <div style={{ position: 'absolute', bottom: '6px', right: '8px', fontSize: '11px', color: '#fff', opacity: 0.92, textShadow: '0 1px 3px rgba(0,0,0,0.5)', display: 'flex', alignItems: 'baseline', lineHeight: 1 }}>
+                <span style={{ fontFamily: SANS, fontWeight: 800, letterSpacing: '-0.01em' }}>fits</span><em style={{ fontFamily: SERIF, fontStyle: 'italic', fontWeight: 600, color: C.pink, fontSize: '1.05em' }}>you</em>
               </div>
             </div>
           ))}
@@ -468,7 +476,7 @@ function FittingRoom({
       )}
 
       {error && (
-        <div style={{ background: '#fee2e2', color: '#991b1b', borderRadius: '8px', padding: '9px 12px', fontSize: '12px', lineHeight: 1.4 }}>
+        <div style={{ background: '#fee2e2', color: '#991b1b', borderRadius: '0', padding: '9px 12px', fontSize: '12px', lineHeight: 1.4 }}>
           {error}
         </div>
       )}
@@ -739,8 +747,8 @@ function Popup() {
 
       {/* Header */}
       <div style={{ background: C.ink, padding: '12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <div style={{ fontFamily: SERIF, fontSize: '22px', color: C.bone, lineHeight: 1 }}>
-          fits<em style={{ color: C.pink, fontStyle: 'italic' }}>you</em>
+        <div style={{ fontSize: '22px', lineHeight: 1, display: 'flex', alignItems: 'baseline' }}>
+          <span style={{ fontFamily: SANS, fontWeight: 800, color: '#fff', letterSpacing: '-0.01em' }}>fits</span><em style={{ fontFamily: SERIF, fontStyle: 'italic', fontWeight: 600, color: C.pink, fontSize: '1.05em' }}>you</em>
         </div>
         <button
           onClick={() => window.close()}
@@ -765,7 +773,7 @@ function Popup() {
           </div>
           <div style={{
             fontFamily: MONO, fontSize: '8px', letterSpacing: '0.08em', textTransform: 'uppercase',
-            padding: '2px 6px', borderRadius: '4px', flexShrink: 0,
+            padding: '2px 8px', borderRadius: '100px', flexShrink: 0,
             background: subscriptionTier === 'free' ? 'rgba(255,255,255,0.08)' : C.pink,
             color: subscriptionTier === 'free' ? C.muted : C.surface,
           }}>
@@ -820,11 +828,11 @@ function Popup() {
       {/* ── Manual upload ── */}
       {status === 'manual' && (
         <div style={{ padding: '16px' }}>
-          <div style={{ background: C.surface, borderRadius: '10px', padding: '14px', marginBottom: '12px', border: `0.5px solid ${C.border}` }}>
+          <div style={{ background: C.surface, borderRadius: '0', padding: '14px', marginBottom: '12px', border: `0.5px solid ${C.border}` }}>
             <div style={{ fontFamily: SERIF, fontSize: '16px', marginBottom: '5px' }}>Can't detect image</div>
             <p style={{ fontSize: '12px', color: C.muted, lineHeight: 1.5 }}>Screenshot the item and upload it to add it to your wishlist.</p>
           </div>
-          <label style={{ display: 'block', border: `1.5px dashed ${C.pink}`, borderRadius: '10px', padding: '18px', textAlign: 'center', cursor: 'pointer', marginBottom: '10px' }}>
+          <label style={{ display: 'block', border: `1.5px dashed ${C.pink}`, borderRadius: '0', padding: '18px', textAlign: 'center', cursor: 'pointer', marginBottom: '10px' }}>
             <div style={{ fontSize: '22px', marginBottom: '4px' }}>📷</div>
             <div style={{ fontSize: '12px', color: C.pinkDark, fontWeight: 600 }}>Tap to upload screenshot</div>
             <input type="file" accept="image/jpeg,image/png,image/webp" onChange={handleFileUpload} style={{ display: 'none' }} />
@@ -835,7 +843,7 @@ function Popup() {
 
       {/* ── Main UI ── */}
       {status === 'idle' && (
-        <div>
+        <div style={{ display: 'flex', flexDirection: 'column', maxHeight: '520px' }}>
           {/* Action bar */}
           <div style={{ background: C.ink, borderBottom: `0.5px solid rgba(255,255,255,0.08)`, padding: '10px 16px' }}>
             <button
@@ -844,9 +852,10 @@ function Popup() {
               style={{
                 width: '100%', padding: '9px 14px',
                 background: saveState === 'working' ? 'rgba(255,255,255,0.08)' : C.pink,
-                color: C.surface, border: 'none', borderRadius: '8px',
-                fontSize: '13px', fontWeight: 600, cursor: saveState === 'working' ? 'default' : 'pointer',
-                fontFamily: SANS, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
+                color: '#fff', border: 'none', borderRadius: 0,
+                fontSize: '11px', fontWeight: 700, cursor: saveState === 'working' ? 'default' : 'pointer',
+                fontFamily: SANS, letterSpacing: '0.14em', textTransform: 'uppercase',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
               }}
             >
               {saveState === 'working' ? (
@@ -892,7 +901,7 @@ function Popup() {
           </div>
 
           {/* Tab content */}
-          <div style={{ padding: '14px 16px 16px', maxHeight: '480px', overflowY: 'auto' }}>
+          <div style={{ padding: '14px 16px 16px', flex: 1, overflowY: 'auto', minHeight: 0 }}>
 
             {/* ── Try-ons tab ── */}
             {tab === 'tryons' && (
@@ -910,7 +919,7 @@ function Popup() {
                 <div>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
                     {tryOns.slice(0, 8).map((item) => (
-                      <div key={item.id} style={{ background: C.surface, borderRadius: '10px', border: `0.5px solid ${C.border}`, overflow: 'hidden' }}>
+                      <div key={item.id} style={{ background: C.surface, borderRadius: '0', border: `0.5px solid ${C.border}`, overflow: 'hidden' }}>
                         {item.output_image_urls?.[0] ? (
                           <div style={{ position: 'relative' }}>
                             <AuthImg
@@ -918,8 +927,8 @@ function Popup() {
                               alt={item.product_title ?? 'Try-on'}
                               style={{ width: '100%', height: '130px', objectFit: 'cover', display: 'block' }}
                             />
-                            <div style={{ position: 'absolute', bottom: '5px', right: '7px', fontFamily: SERIF, fontSize: '9px', color: C.surface, opacity: 0.9 }}>
-                              fits<em style={{ color: C.pink, fontStyle: 'italic' }}>you</em>
+                            <div style={{ position: 'absolute', bottom: '5px', right: '7px', fontSize: '9px', color: '#fff', opacity: 0.9, display: 'flex', alignItems: 'baseline', lineHeight: 1 }}>
+                              <span style={{ fontFamily: SANS, fontWeight: 800, letterSpacing: '-0.01em' }}>fits</span><em style={{ fontFamily: SERIF, fontStyle: 'italic', fontWeight: 600, color: C.pink, fontSize: '1.05em' }}>you</em>
                             </div>
                           </div>
                         ) : (
@@ -959,11 +968,11 @@ function Popup() {
                     <div
                       key={item.id}
                       onClick={() => item.product_url && chrome.tabs.create({ url: item.product_url })}
-                      style={{ background: C.surface, borderRadius: '10px', padding: '10px', border: `0.5px solid ${C.border}`, display: 'flex', gap: '10px', alignItems: 'center', cursor: item.product_url ? 'pointer' : 'default' }}
+                      style={{ background: C.surface, borderRadius: '0', padding: '10px', border: `0.5px solid ${C.border}`, display: 'flex', gap: '10px', alignItems: 'center', cursor: item.product_url ? 'pointer' : 'default' }}
                     >
                       <AuthImg
                         src={item.product_image_url} token={token} alt={item.product_title ?? 'Item'}
-                        style={{ width: '56px', height: '56px', borderRadius: '8px', objectFit: 'cover', flexShrink: 0 }}
+                        style={{ width: '56px', height: '56px', borderRadius: '0', objectFit: 'cover', flexShrink: 0 }}
                       />
                       <div style={{ flex: 1, minWidth: 0 }}>
                         {item.store_name && <StoreTag name={item.store_name} />}
@@ -1006,7 +1015,7 @@ function Popup() {
                 <div>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
                     {wardrobe.map((item) => (
-                      <div key={item.id} style={{ background: C.surface, borderRadius: '10px', border: `0.5px solid ${C.border}`, overflow: 'hidden' }}>
+                      <div key={item.id} style={{ background: C.surface, borderRadius: '0', border: `0.5px solid ${C.border}`, overflow: 'hidden' }}>
                         <AuthImg
                           src={item.image_url} token={token} alt={item.name ?? 'Item'}
                           style={{ width: '100%', height: '110px', objectFit: 'contain', background: C.bone, display: 'block' }}
@@ -1052,24 +1061,25 @@ function Popup() {
 
 // ─── Style constants ──────────────────────────────────────────────────────────
 const btnPink: preact.JSX.CSSProperties = {
-  display: 'block', width: '100%', padding: '12px 16px',
-  background: C.pink, color: C.surface, border: 'none', borderRadius: '10px',
-  fontSize: '14px', fontWeight: 600, cursor: 'pointer', fontFamily: SANS,
-  letterSpacing: '-0.01em',
+  display: 'block', width: '100%', padding: '13px 16px',
+  background: C.pink, color: '#fff', border: 'none', borderRadius: 0,
+  fontSize: '11px', fontWeight: 700, cursor: 'pointer', fontFamily: SANS,
+  letterSpacing: '0.14em', textTransform: 'uppercase',
 };
 
 const btnInk: preact.JSX.CSSProperties = {
-  display: 'block', width: '100%', padding: '12px 16px',
-  background: C.ink, color: C.bone, border: 'none', borderRadius: '10px',
-  fontSize: '14px', fontWeight: 600, cursor: 'pointer', fontFamily: SANS,
-  letterSpacing: '-0.01em',
+  display: 'block', width: '100%', padding: '13px 16px',
+  background: C.ink, color: '#fff', border: 'none', borderRadius: 0,
+  fontSize: '11px', fontWeight: 700, cursor: 'pointer', fontFamily: SANS,
+  letterSpacing: '0.14em', textTransform: 'uppercase',
 };
 
 const btnGhost: preact.JSX.CSSProperties = {
-  display: 'block', width: '100%', padding: '10px 16px',
-  background: 'transparent', color: C.pinkDark,
-  border: `1px solid ${C.pink}`, borderRadius: '10px',
-  fontSize: '13px', fontWeight: 500, cursor: 'pointer', fontFamily: SANS,
+  display: 'block', width: '100%', padding: '11px 16px',
+  background: 'transparent', color: C.berry,
+  border: `1px solid ${C.pink}`, borderRadius: 0,
+  fontSize: '11px', fontWeight: 600, cursor: 'pointer', fontFamily: SANS,
+  letterSpacing: '0.10em', textTransform: 'uppercase',
 };
 
 render(<Popup />, document.getElementById('app')!);

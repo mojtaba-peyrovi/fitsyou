@@ -7,6 +7,7 @@ module.exports = {
   entry: {
     popup: './extension/src/popup/index.tsx',
     content: './extension/src/content/index.ts',
+    badge: './extension/src/content/badge.ts',
     background: './extension/src/background/index.ts',
   },
   output: {

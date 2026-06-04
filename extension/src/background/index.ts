@@ -31,8 +31,26 @@ chrome.runtime.onMessageExternal.addListener((message: AuthTokenMessage, _sender
   }
 });
 
-// PRODUCT_EXTRACTED is now handled directly in the popup (see popup/index.tsx).
-// Background only needs to receive and store the auth token from the web app.
-chrome.runtime.onMessage.addListener((_message: IncomingMessage, _sender, _sendResponse) => {
-  // reserved for future use
+interface OpenPopupMessage {
+  type: 'OPEN_POPUP';
+}
+
+type AnyMessage = IncomingMessage | OpenPopupMessage;
+
+// Open the side panel when the toolbar icon is clicked (no default_popup set).
+chrome.action.onClicked.addListener((tab) => {
+  if (tab.windowId) {
+    chrome.sidePanel.open({ windowId: tab.windowId });
+  }
+});
+
+// PRODUCT_EXTRACTED is handled directly in the popup (see popup/index.tsx).
+// OPEN_POPUP is sent by the floating badge in the content script.
+chrome.runtime.onMessage.addListener((message: AnyMessage, sender, _sendResponse) => {
+  if (message.type === 'OPEN_POPUP') {
+    const windowId = sender.tab?.windowId;
+    if (windowId) {
+      chrome.sidePanel.open({ windowId });
+    }
+  }
 });

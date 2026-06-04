@@ -434,6 +434,7 @@ The square PNG is resized to max 1024×1024 (`fit: inside`, no upscaling) at com
 | 16 | Smart garment image selection — score candidates, prefer flat-lay over hero, on BOTH extension (DOM) and web link-paste (HTML + user override) | Small | ✅ Done |
 | 17 | Try-on garment isolation — prompt the generator to use ONLY the target garment, ignoring model + other items in a hero-shot reference | Small | ✅ Done |
 | 18 | Browserless headless-render fallback — fetch the real JS-rendered gallery (flat-lay) for SPA retailers on link-paste; activates when `BROWSERLESS_API_KEY` is set | Medium | ⬜ Code done, needs key + live verify |
+| 19 | Floating Fitsyou logo badge on Chrome (signed-in state) — a fixed-position circle with the Fitsyou icon mark sticks out on the side of the browser when signed in, similar to HubSpot/Apollo; tapping it opens the extension popup; hidden/disabled when signed out | Medium | ✅ Done |
 
 #### Detail
 
