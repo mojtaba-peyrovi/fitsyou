@@ -431,6 +431,7 @@ The square PNG is resized to max 1024×1024 (`fit: inside`, no upscaling) at com
 | 13 | Set up analytics — instrument activation funnel | Small | ⬜ Not Started |
 | 14 | Record before/after demo video for TikTok / Instagram Reel | Small | ⬜ Not Started |
 | 15 | Soft launch + post first organic video | Small | ⬜ Not Started |
+| 16 | Smart garment image selection — score all candidate images, prefer flat-lay/studio over hero/lifestyle | Small | ✅ Done |
 
 #### Detail
 
@@ -503,4 +504,4 @@ PADDLE_WEBHOOK_SECRET=
 
 ---
 
-*Last updated: 2026-05-31 — Wk 6 complete. Atelier tier added (€19.99/mo, unlimited). **Stack-switch reversed:** web app stays on Next.js + Vercel; the Lovable export (`fitsyou-frontend`, TanStack Start) is a design reference whose UI/tokens get ported into the existing app. Try-on generation runs on both the extension popup and the web app. Wk 7 spec in `CLAUDE_CODE_HANDOVER_WK7_DESIGN.md` (with the stack decision overridden here).*
+*Last updated: 2026-06-04 — Wk 7 in progress. Smart garment image selection implemented (Wk 7 task 16): content script now scores all candidate images and prefers flat-lay/studio shots over hero/lifestyle images. Wk 6 complete. Atelier tier added (€19.99/mo, unlimited). **Stack-switch reversed:** web app stays on Next.js + Vercel; the Lovable export (`fitsyou-frontend`, TanStack Start) is a design reference whose UI/tokens get ported into the existing app. Try-on generation runs on both the extension popup and the web app. Wk 7 spec in `CLAUDE_CODE_HANDOVER_WK7_DESIGN.md` (with the stack decision overridden here).*

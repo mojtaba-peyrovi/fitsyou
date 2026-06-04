@@ -284,21 +284,76 @@ function extractSizes() {
         selectedSize: selected,
     };
 }
+/**
+ * Score a candidate image: higher = cleaner product shot, more suitable for
+ * try-on (flat-lay, front/back on plain background). Lower = lifestyle hero.
+ */
+function scoreProductShot(img, src) {
+    let score = 0;
+    const srcLower = src.toLowerCase();
+    // URL signals: penalise lifestyle/editorial, boost studio/detail shots
+    if (/[_\-/](model|lifestyle|editorial|campaign|styled|outfit|mannequin)[_\-/.]/.test(srcLower))
+        score -= 30;
+    if (/[_\-/](flat|front|back|studio|ghost|laydown|detail|zoom|pdp)[_\-/.]/.test(srcLower))
+        score += 25;
+    // Numeric index in URL: _01_ is usually the hero; _02_, _03_ often cleaner
+    const numMatch = srcLower.match(/[_\-]0*(\d+)[_\-.]/);
+    if (numMatch) {
+        const idx = parseInt(numMatch[1], 10);
+        if (idx === 1)
+            score -= 10;
+        else if (idx === 2 || idx === 3)
+            score += 10;
+    }
+    // Aspect ratio: square (~1:1) → flat-lay; portrait → product; landscape → banner/hero
+    const nw = img.naturalWidth;
+    const nh = img.naturalHeight;
+    if (nw > 0 && nh > 0) {
+        const ratio = nw / nh;
+        if (ratio >= 0.85 && ratio <= 1.15)
+            score += 20; // square: often flat-lay
+        else if (ratio >= 0.55 && ratio < 0.85)
+            score += 10; // portrait: typical product
+        else if (ratio > 1.3)
+            score -= 20; // landscape: likely hero/banner
+    }
+    // DOM context: thumbnail/gallery strips contain cleaner product angles
+    if (img.closest('[class*="thumb" i],[class*="gallery" i],[class*="carousel" i],[class*="swatch" i]')) {
+        score += 8;
+    }
+    // Hero/featured containers usually hold lifestyle shots
+    if (img.closest('[class*="hero" i],[class*="featured" i],[class*="main-image" i]')) {
+        score -= 10;
+    }
+    return score;
+}
+/** Pick the highest-scored image from a set of candidates, deduped by src. */
+function bestScored(candidates) {
+    if (candidates.length === 0)
+        return null;
+    candidates.sort((a, b) => b.score - a.score);
+    return candidates[0].src;
+}
 // ── Extraction layers ─────────────────────────────────────────────────────────
 function extractWithSiteSelectors() {
     const hostname = location.hostname.replace(/^www\./, '');
     const siteName = Object.keys(SITE_SELECTORS).find((k) => hostname.includes(k));
     if (!siteName)
         return null;
+    const seen = new Set();
+    const candidates = [];
     for (const selector of SITE_SELECTORS[siteName]) {
-        const el = document.querySelector(selector);
-        if (el && isValidProductImage(el)) {
+        for (const el of Array.from(document.querySelectorAll(selector))) {
+            if (!isValidProductImage(el))
+                continue;
             const src = bestSrc(el);
-            if (src)
-                return src;
+            if (!src || seen.has(src))
+                continue;
+            seen.add(src);
+            candidates.push({ src, score: scoreProductShot(el, src) });
         }
     }
-    return null;
+    return bestScored(candidates);
 }
 function extractWithGenericSelectors() {
     const selectors = [
@@ -311,31 +366,37 @@ function extractWithGenericSelectors() {
         'img[data-testid*="product"]',
         '[data-testid*="product"] img',
     ];
+    const seen = new Set();
+    const candidates = [];
     for (const selector of selectors) {
-        const el = document.querySelector(selector);
-        if (el && isValidProductImage(el)) {
+        for (const el of Array.from(document.querySelectorAll(selector))) {
+            if (!isValidProductImage(el))
+                continue;
             const src = bestSrc(el);
-            if (src)
-                return src;
+            if (!src || seen.has(src))
+                continue;
+            seen.add(src);
+            candidates.push({ src, score: scoreProductShot(el, src) });
         }
     }
-    return null;
+    return bestScored(candidates);
 }
-function extractLargestImage() {
-    let best = null;
+function extractBestScoredImage() {
+    const seen = new Set();
+    const candidates = [];
     for (const img of Array.from(document.querySelectorAll('img'))) {
         if (!isValidProductImage(img))
             continue;
         const src = bestSrc(img);
-        if (!src)
+        if (!src || seen.has(src))
             continue;
+        seen.add(src);
+        // Composite score: product-shot score + area bonus (prefer larger, but score dominates)
         const rect = img.getBoundingClientRect();
-        const area = rect.width * rect.height;
-        if (!best || area > best.area) {
-            best = { src, area };
-        }
+        const areaNorm = Math.min(rect.width * rect.height / 400000, 1) * 5; // up to +5 for size
+        candidates.push({ src, score: scoreProductShot(img, src) + areaNorm });
     }
-    return best?.src ?? null;
+    return bestScored(candidates);
 }
 function extractOgImage() {
     const el = document.querySelector('meta[property="og:image"]');
@@ -344,7 +405,7 @@ function extractOgImage() {
 function extractProductImage() {
     return (extractWithSiteSelectors() ??
         extractWithGenericSelectors() ??
-        extractLargestImage() ??
+        extractBestScoredImage() ??
         extractOgImage());
 }
 function extractProductTitle() {
