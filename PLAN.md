@@ -408,6 +408,18 @@ The square PNG is resized to max 1024×1024 (`fit: inside`, no upscaling) at com
 
 ---
 
+#### Duplicate prevention — wardrobe + wishlist (added post-Wk 6)
+
+Stops the same item being saved twice. Migration: `supabase/migrations/20260605_dedup_wardrobe_wishlist.sql`.
+
+**Wardrobe (`POST /api/wardrobe`):** the raw upload bytes are SHA-256 hashed and stored in a new `source_hash` column (partial unique index on `(user_id, source_hash)`). Before running the expensive Replicate + OpenAI + R2 pipeline, the route checks for an existing row with the same `(user_id, source_hash)` — if found it returns **HTTP 409 "This item is already in your wardrobe."**, which the dashboard surfaces in the existing `ErrorToast`. No frontend change was needed (`WardrobeTab.tsx` already throws on any non-`ok` response).
+
+**Wishlist (`POST /api/wishlist`):** the racy select-then-insert was replaced with an atomic `upsert(..., { ignoreDuplicates: true })` backed by a DB `UNIQUE (user_id, product_url)` constraint. On a suppressed conflict the existing row is fetched and returned with `deduped: true`.
+
+**Known gap (deferred):** items added *before* this feature have `source_hash = null`, so the first re-upload of a legacy item still creates one duplicate (every upload after that is caught). A full backfill would require switching the dedup key from raw-bytes to the **processed-image** hash (the only artifact recoverable from R2 for old rows) and re-hashing every stored image — scoped but not done. Cleaning up the few existing visible duplicates is a manual delete.
+
+---
+
 ### Wk 7 · Branding + Design + PWA + Launch Prep ⬜ Not Started
 
 > **Authoritative spec:** `CLAUDE_CODE_HANDOVER_WK7_DESIGN.md` in the extension repo root, **with one decision reversed (2026-05-31):** the web app stays on **Next.js + Vercel**. Lovable's export is a *design reference*, not the deployed app — we port its UI/tokens into the existing Next.js app and keep the working Wk 3–6 backend. (Reason the handover gave for switching to Vite/Cloudflare — "Lovable outputs Vite" — only applied if we adopted Lovable's code wholesale, which we are not.) Still in force: try-on generation runs on **both** the extension popup (inline) **and** fitsyou.live (on saved items); no Tailwind in the extension.
@@ -510,6 +522,8 @@ PADDLE_WEBHOOK_SECRET=
 | Playwright server-side worker | Post-launch |
 
 ---
+
+*2026-06-05 — Duplicate prevention shipped for wardrobe + wishlist (post-Wk 6 hardening). Wardrobe re-uploads now return 409 "already in your wardrobe" via a `source_hash` SHA-256 of the raw upload bytes; wishlist uses an atomic upsert on `(user_id, product_url)`. Migration `20260605_dedup_wardrobe_wishlist.sql`. Legacy items (null hash) still allow one duplicate on first re-upload — full backfill deferred. See "Duplicate prevention" subsection above.*
 
 *Last updated: 2026-06-04 — Tasks from Feedback (all 7) completed: (1) unonboarded-user redirect in extension popup — signed-out screen now shows "Create free account" CTA with sign-in fallback; (2) close button (×) added to popup header; (3) user face photo + email shown in identity bar below header when signed in; (4) wishlist save toast updated to "saved — close & keep browsing" making persistence explicit; (5) wishlist items now clickable to open original product URL; (6) shoe size added to onboarding measurements page + profile API + Supabase migration; (7) account email + remaining tries shown in popup identity bar.*
 
