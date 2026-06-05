@@ -1,5 +1,8 @@
 import { render } from 'preact';
 import { useState, useEffect, useRef } from 'preact/hooks';
+import { initAnalytics, identifyUser, capture } from '../analytics';
+
+initAnalytics();
 
 const API_BASE = 'https://fitsyou-web.vercel.app';
 
@@ -299,6 +302,7 @@ function FittingRoom({
     const urls = ((res.data as { output_image_urls?: string[] }).output_image_urls) ?? [];
     setResults(urls);
     setPhase('done');
+    capture('tryon_generated', { item_count: selected.length });
   }
 
   async function saveToTryOns() {
@@ -331,7 +335,7 @@ function FittingRoom({
       store_name: firstWithUrl?.store ?? null,
       outfit_items: outfitItems,
     });
-    if (res.ok) { setSaved(true); chrome.storage.local.remove('fitsyou_canvas'); onTryOnSaved(); }
+    if (res.ok) { setSaved(true); chrome.storage.local.remove('fitsyou_canvas'); onTryOnSaved(); capture('tryon_saved'); }
     else setError(res.error ?? 'Save failed');
   }
 
@@ -593,7 +597,7 @@ function Popup() {
         const limit = TIER_LIMITS[tier] ?? 5;
         setTriesLeft(Math.max(0, limit - (profile.try_on_count_this_month ?? 0)));
       }
-      if (profile?.email) setUserEmail(profile.email);
+      if (profile?.email) { setUserEmail(profile.email); identifyUser(profile.email); }
       if (profile?.face_url !== undefined) setUserFaceUrl(profile.face_url ?? null);
       if (profile?.photo_url !== undefined) setUserPhotoUrl(profile.photo_url ?? null);
       const isReady = !!profile?.photo_url;
@@ -618,6 +622,14 @@ function Popup() {
     chrome.storage.onChanged.addListener(onChange);
     return () => chrome.storage.onChanged.removeListener(onChange);
   }, []);
+
+  const panelOpenedRef = useRef(false);
+  useEffect(() => {
+    if (status === 'idle' && !panelOpenedRef.current) {
+      panelOpenedRef.current = true;
+      capture('sidepanel_opened');
+    }
+  }, [status]);
 
   useEffect(() => {
     if (status === 'idle' && token && !listsLoaded) loadLists(token);
@@ -711,6 +723,7 @@ function Popup() {
     const name = normalizedTitle ? `"${normalizedTitle}"` : 'Item';
     const fitMsg = fitResult && fitResult.verdict !== 'unknown' ? ` · ${FIT_BADGE[fitResult.verdict].label}` : '';
     showToast(`${name} saved${fitMsg} — close & keep browsing`);
+    capture('wishlist_item_saved', { store: storeName(tabUrl), fit_verdict: fitResult?.verdict ?? null });
     setListsLoaded(false);
     setTab('wishlist');
   }

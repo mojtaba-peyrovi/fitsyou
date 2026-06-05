@@ -1,5 +1,7 @@
+require('dotenv').config();
 const path = require('path');
 const CopyPlugin = require('copy-webpack-plugin');
+const webpack = require('webpack');
 
 module.exports = {
   mode: 'development',
@@ -35,6 +37,9 @@ module.exports = {
   plugins: [
     new CopyPlugin({
       patterns: [{ from: 'extension/public', to: '.' }],
+    }),
+    new webpack.DefinePlugin({
+      'process.env.POSTHOG_KEY': JSON.stringify(process.env.POSTHOG_KEY ?? ''),
     }),
   ],
 };

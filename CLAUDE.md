@@ -51,3 +51,4 @@ This rule applies retroactively: if a session ends without documenting a new too
 | Resend | Transactional email (signup confirmation, etc.) | Configured via Supabase SMTP settings — host `smtp.resend.com`, port `465`, username `resend`, password = Resend API key |
 | OpenStreetMap Nominatim | Free city autocomplete in onboarding backdrop step | No API key — public endpoint `nominatim.openstreetmap.org` |
 | Playwright | Responsive screenshot testing (dev only) | None — `scripts/shots*.mjs`, run locally |
+| PostHog | Product analytics — activation funnel (install, sidepanel open, wishlist save, try-on generate/save) | `POSTHOG_KEY` in `.env` (extension); `NEXT_PUBLIC_POSTHOG_KEY` in `.env.local` (web app); host `https://us.i.posthog.com` |

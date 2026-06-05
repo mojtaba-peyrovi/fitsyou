@@ -444,7 +444,7 @@ Stops the same item being saved twice. Migration: `supabase/migrations/20260605_
 | 10 | Wire try-on generation into extension popup (generate + display + save in-popup) | Large | ⬜ Not Started |
 | 11 | Wire try-on generation into web app (generate from saved wishlist items) | Medium | ⬜ Not Started |
 | 12 | Submit to Chrome Web Store *(target early, review can take weeks)* | Medium | ⬜ Not Started |
-| 13 | Set up analytics — instrument activation funnel | Small | ⬜ Not Started |
+| 13 | Set up analytics — instrument activation funnel | Small | ✅ Done |
 | 14 | Record before/after demo video for TikTok / Instagram Reel | Small | ⬜ Not Started |
 | 15 | Soft launch + post first organic video | Small | ⬜ Not Started |
 | 16 | Smart garment image selection — score candidates, prefer flat-lay over hero, on BOTH extension (DOM) and web link-paste (HTML + user override) | Small | ✅ Done |
