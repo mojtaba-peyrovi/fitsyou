@@ -408,9 +408,9 @@ The square PNG is resized to max 1024×1024 (`fit: inside`, no upscaling) at com
 
 ---
 
-#### Duplicate prevention — wardrobe + wishlist (added post-Wk 6)
+#### Duplicate prevention — wardrobe + wishlist (added post-Wk 6) ✅ Verified 2026-06-05
 
-Stops the same item being saved twice. Migration: `supabase/migrations/20260605_dedup_wardrobe_wishlist.sql`.
+Stops the same item being saved twice. Migration: `supabase/migrations/20260605_dedup_wardrobe_wishlist.sql`. **Verified live on fitsyou.live — both single and bulk uploads correctly reject duplicates.**
 
 **Wardrobe (`POST /api/wardrobe`):** the raw upload bytes are SHA-256 hashed and stored in a new `source_hash` column (partial unique index on `(user_id, source_hash)`). Before running the expensive Replicate + OpenAI + R2 pipeline, the route checks for an existing row with the same `(user_id, source_hash)` — if found it returns **HTTP 409 "This item is already in your wardrobe."**, which the dashboard surfaces in the existing `ErrorToast`. No frontend change was needed (`WardrobeTab.tsx` already throws on any non-`ok` response).
 
