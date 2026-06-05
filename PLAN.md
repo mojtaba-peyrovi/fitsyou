@@ -533,6 +533,8 @@ PADDLE_WEBHOOK_SECRET=
 
 ---
 
+*2026-06-05 — Wardrobe items sorting and filtering added (post-Wk 6 hardening). Category filter pills (All + top/bottom/dress/outerwear/shoes/accessory) and sort dropdown (Newest first / Oldest first / Name A→Z / Name Z→A) added to WardrobeTab. All client-side — no API changes. Select-all in select mode respects the active filter.*
+
 *2026-06-05 — Duplicate prevention shipped for wardrobe + wishlist (post-Wk 6 hardening). Wardrobe re-uploads now return 409 "already in your wardrobe" via a `source_hash` SHA-256 of the raw upload bytes; wishlist uses an atomic upsert on `(user_id, product_url)`. Migration `20260605_dedup_wardrobe_wishlist.sql`. Legacy items (null hash) still allow one duplicate on first re-upload — full backfill deferred. See "Duplicate prevention" subsection above.*
 
 *Last updated: 2026-06-04 — Tasks from Feedback (all 7) completed: (1) unonboarded-user redirect in extension popup — signed-out screen now shows "Create free account" CTA with sign-in fallback; (2) close button (×) added to popup header; (3) user face photo + email shown in identity bar below header when signed in; (4) wishlist save toast updated to "saved — close & keep browsing" making persistence explicit; (5) wishlist items now clickable to open original product URL; (6) shoe size added to onboarding measurements page + profile API + Supabase migration; (7) account email + remaining tries shown in popup identity bar.*
