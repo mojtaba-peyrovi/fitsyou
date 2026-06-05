@@ -416,6 +416,8 @@ Stops the same item being saved twice. Migration: `supabase/migrations/20260605_
 
 **Wishlist (`POST /api/wishlist`):** the racy select-then-insert was replaced with an atomic `upsert(..., { ignoreDuplicates: true })` backed by a DB `UNIQUE (user_id, product_url)` constraint. On a suppressed conflict the existing row is fetched and returned with `deduped: true`.
 
+**Bulk upload:** `handleBulk` uploads files sequentially through the same route, so duplicates are caught both against existing items and against earlier files in the same batch. It tallies the results and shows one **summary toast** — e.g. *"5 of 7 added — 2 already in your wardrobe"* — instead of a generic per-duplicate error. `uploadSingleFile` tags each failure with a code (`duplicate` / `too_large` / `failed`) so duplicates are counted apart from genuine errors; the toast stays silent when every file uploads cleanly.
+
 **Known gap (deferred):** items added *before* this feature have `source_hash = null`, so the first re-upload of a legacy item still creates one duplicate (every upload after that is caught). A full backfill would require switching the dedup key from raw-bytes to the **processed-image** hash (the only artifact recoverable from R2 for old rows) and re-hashing every stored image — scoped but not done. Cleaning up the few existing visible duplicates is a manual delete.
 
 ---
