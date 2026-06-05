@@ -533,7 +533,7 @@ PADDLE_WEBHOOK_SECRET=
 
 ---
 
-*2026-06-05 — Wardrobe items sorting and filtering added (post-Wk 6 hardening). Category filter pills (All + top/bottom/dress/outerwear/shoes/accessory) and sort dropdown (Newest first / Oldest first / Name A→Z / Name Z→A) added to WardrobeTab. All client-side — no API changes. Select-all in select mode respects the active filter.*
+*2026-06-05 — Wardrobe items sorting, filtering, and gender-aware categories added (post-Wk 6 hardening). Category filter pills (All + top/bottom/dress/outerwear/shoes/accessory) and sort dropdown (Newest first / Oldest first / Name A→Z / Name Z→A) added to WardrobeTab. "Dress" category pill hidden for Men's profiles. Shopping section selector upgraded from `<select>` to pill buttons (Any / Women's / Men's) in both onboarding and profile page. Gender threaded from profile → DashboardTabs → WardrobeTab.*
 
 *2026-06-05 — Duplicate prevention shipped for wardrobe + wishlist (post-Wk 6 hardening). Wardrobe re-uploads now return 409 "already in your wardrobe" via a `source_hash` SHA-256 of the raw upload bytes; wishlist uses an atomic upsert on `(user_id, product_url)`. Migration `20260605_dedup_wardrobe_wishlist.sql`. Legacy items (null hash) still allow one duplicate on first re-upload — full backfill deferred. See "Duplicate prevention" subsection above.*
 
