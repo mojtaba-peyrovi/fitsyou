@@ -36,13 +36,19 @@ chrome.runtime.onInstalled.addListener((details) => {
 
 // Auth token arrives from the web app page (external sender), so it must be
 // handled by onMessageExternal — onMessage only receives internal messages.
-chrome.runtime.onMessageExternal.addListener((message: AuthTokenMessage, _sender, sendResponse) => {
+chrome.runtime.onMessageExternal.addListener((message: AuthTokenMessage, sender, sendResponse) => {
   if (message.type === 'AUTH_TOKEN') {
     chrome.storage.local.set({
       fitsyou_token: message.token,
       fitsyou_refresh_token: message.refreshToken,
     }, () => {
       sendResponse({ ok: true });
+      // Auth completed in a separate tab — close it and bring the user
+      // straight back into the extension so there's no manual tab juggling.
+      const tabId = sender.tab?.id;
+      const windowId = sender.tab?.windowId;
+      if (windowId) chrome.sidePanel.open({ windowId });
+      if (tabId !== undefined) chrome.tabs.remove(tabId);
     });
     return true;
   }
