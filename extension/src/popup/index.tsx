@@ -38,6 +38,7 @@ interface ExtractResult {
   success: boolean;
   imageUrl?: string;
   productTitle?: string;
+  price?: string | null;
   productUrl?: string;
   sizeChartText?: string;
   availableSizes?: string[];
@@ -68,6 +69,7 @@ interface WishlistItem {
   product_image_url: string | null;
   product_title: string | null;
   store_name: string | null;
+  price: string | null;
   fit_verdict: FitVerdict | null;
   recommended_size: string | null;
 }
@@ -316,6 +318,7 @@ function FittingRoom({
           store: w?.store_name ?? null,
           url: w?.product_url ?? null,
           image: w?.product_image_url ?? null,
+          price: w?.price ?? null,
         };
       } else {
         const w = wardrobe.find((w) => w.id === ref.id);
@@ -324,6 +327,7 @@ function FittingRoom({
           store: null,
           url: null,
           image: w?.image_url ?? null,
+          price: null,
         };
       }
     });
@@ -712,6 +716,7 @@ function Popup() {
       product_image_url: ext.imageUrl,
       product_title: normalizedTitle,
       store_name: storeName(tabUrl),
+      price: ext.price ?? null,
       available_sizes: ext.availableSizes,
       fit_verdict: fitResult?.verdict ?? null,
       recommended_size: fitResult?.recommended_size ?? null,
@@ -992,6 +997,9 @@ function Popup() {
                         <div style={{ fontSize: '12px', fontWeight: 600, color: C.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: '2px' }}>
                           {item.product_title ? toSentenceCase(item.product_title) : 'Untitled item'}
                         </div>
+                        {item.price && (
+                          <div style={{ fontSize: '11px', color: C.muted, marginTop: '2px' }}>{item.price}</div>
+                        )}
                         {item.fit_verdict && item.fit_verdict !== 'unknown' && (
                           <div style={{ fontSize: '10px', color: (FIT_BADGE[item.fit_verdict] ?? FIT_BADGE.unknown).fg, marginTop: '2px' }}>
                             {(FIT_BADGE[item.fit_verdict] ?? FIT_BADGE.unknown).label}

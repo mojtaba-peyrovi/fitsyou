@@ -2,6 +2,7 @@ interface ExtractResult {
   success: boolean;
   imageUrl?: string;
   productTitle?: string;
+  price?: string | null;
   productUrl?: string;
   sizeChartText?: string;
   availableSizes?: string[];
@@ -433,6 +434,49 @@ function extractProductImage(): string | null {
   );
 }
 
+const CURRENCY_SYMBOLS: Record<string, string> = {
+  EUR: '€', USD: '$', GBP: '£', JPY: '¥', CHF: 'CHF ', SEK: 'kr ', NOK: 'kr ', DKK: 'kr ',
+};
+
+/** Best-effort scrape of the displayed product price (e.g. "€49.99"). Tries
+ * structured data first (JSON-LD / meta tags), then falls back to a visible
+ * element whose text looks like a currency amount. */
+function extractProductPrice(): string | null {
+  for (const script of document.querySelectorAll<HTMLScriptElement>('script[type="application/ld+json"]')) {
+    try {
+      const parsed = JSON.parse(script.textContent ?? '');
+      const nodes = Array.isArray(parsed) ? parsed : [parsed, ...(parsed?.['@graph'] ?? [])];
+      for (const node of nodes) {
+        const offers = node?.offers;
+        const offer = Array.isArray(offers) ? offers[0] : offers;
+        if (offer?.price != null) {
+          const currency = offer.priceCurrency ? (CURRENCY_SYMBOLS[offer.priceCurrency] ?? `${offer.priceCurrency} `) : '';
+          return `${currency}${offer.price}`.trim();
+        }
+      }
+    } catch { /* malformed JSON-LD, skip */ }
+  }
+
+  const metaAmount = document.querySelector<HTMLMetaElement>(
+    'meta[property="product:price:amount"], meta[property="og:price:amount"]'
+  );
+  if (metaAmount?.content) {
+    const metaCurrency = document.querySelector<HTMLMetaElement>(
+      'meta[property="product:price:currency"], meta[property="og:price:currency"]'
+    );
+    const currency = metaCurrency?.content ? (CURRENCY_SYMBOLS[metaCurrency.content] ?? `${metaCurrency.content} `) : '';
+    return `${currency}${metaAmount.content}`.trim();
+  }
+
+  const priceLike = /^[\$€£¥]\s?\d[\d.,]*|\d[\d.,]*\s?(€|kr|CHF|EUR|USD|GBP)$/;
+  for (const el of document.querySelectorAll<HTMLElement>('[itemprop="price"], [class*="price" i], [data-testid*="price" i]')) {
+    const text = el.textContent?.trim();
+    if (text && text.length < 20 && priceLike.test(text)) return text;
+  }
+
+  return null;
+}
+
 function extractProductTitle(): string {
   const ogTitle = document.querySelector<HTMLMetaElement>('meta[property="og:title"]');
   if (ogTitle?.content) return ogTitle.content;
@@ -466,6 +510,7 @@ chrome.runtime.onMessage.addListener((
       success: true,
       imageUrl,
       productTitle: extractProductTitle(),
+      price: extractProductPrice(),
       productUrl: location.href,
       sizeChartText,
       availableSizes,
