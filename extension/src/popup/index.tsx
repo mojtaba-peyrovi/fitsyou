@@ -579,6 +579,12 @@ function Popup() {
   const [toast, setToast]             = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
   const [currentTabUrl, setCurrentTabUrl] = useState('');
 
+  // Wardrobe upload state
+  const [wardrobeUploading, setWardrobeUploading]         = useState(false);
+  const [wardrobeBulkProgress, setWardrobeBulkProgress]   = useState<{ current: number; total: number } | null>(null);
+  const wardrobeSingleInput = useRef<HTMLInputElement>(null);
+  const wardrobeBulkInput   = useRef<HTMLInputElement>(null);
+
   function showToast(msg: string, type: 'success' | 'error' = 'success') {
     setToast({ msg, type });
     setTimeout(() => setToast(null), 3000);
@@ -757,6 +763,78 @@ function Popup() {
       else { showToast('Item saved to wishlist'); setListsLoaded(false); setTab('wishlist'); }
     } catch { showToast('Failed to upload image', 'error'); }
     setStatus('idle');
+  }
+
+  // ── Wardrobe upload helpers ───────────────────────────────────────────────
+  async function uploadWardrobeFile(tk: string, file: File): Promise<{ ok: true; item: WardrobeItem } | { ok: false; error: string; code: 'duplicate' | 'too_large' | 'failed' }> {
+    if (file.size > 4 * 1024 * 1024) {
+      return { ok: false, error: `"${file.name}" exceeds 4 MB — try a smaller image.`, code: 'too_large' };
+    }
+    const form = new FormData();
+    form.append('image', file);
+    try {
+      const r = await fetch(`${API_BASE}/api/wardrobe`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${tk}` },
+        body: form,
+      });
+      const data = await r.json().catch(() => ({})) as { item?: WardrobeItem; error?: string };
+      if (!r.ok) {
+        const msg = data.error ?? `Error ${r.status}`;
+        return { ok: false, error: msg, code: r.status === 409 ? 'duplicate' : r.status === 413 ? 'too_large' : 'failed' };
+      }
+      return { ok: true, item: data.item! };
+    } catch {
+      return { ok: false, error: 'Network error — please try again.', code: 'failed' };
+    }
+  }
+
+  async function handleWardrobeSingle(files: FileList | null) {
+    const file = files?.[0];
+    if (!file) return;
+    const tk = (await getToken()) ?? token;
+    if (!tk) { setStatus('signed-out'); return; }
+    setWardrobeUploading(true);
+    const result = await uploadWardrobeFile(tk, file);
+    setWardrobeUploading(false);
+    if (wardrobeSingleInput.current) wardrobeSingleInput.current.value = '';
+    if (result.ok) {
+      setWardrobe((prev) => [result.item, ...prev]);
+      showToast(`${result.item.name ?? 'Item'} added to wardrobe`);
+    } else {
+      showToast(result.error, 'error');
+    }
+  }
+
+  async function handleWardrobeBulk(files: FileList | null) {
+    if (!files || files.length === 0) return;
+    const tk = (await getToken()) ?? token;
+    if (!tk) { setStatus('signed-out'); return; }
+    const arr = Array.from(files);
+    setWardrobeUploading(true);
+    setWardrobeBulkProgress({ current: 0, total: arr.length });
+    let added = 0; let skipped = 0; let failed = 0;
+    for (let i = 0; i < arr.length; i++) {
+      setWardrobeBulkProgress({ current: i + 1, total: arr.length });
+      const result = await uploadWardrobeFile(tk, arr[i]);
+      if (result.ok) { setWardrobe((prev) => [result.item, ...prev]); added++; }
+      else if (result.code === 'duplicate') skipped++;
+      else failed++;
+    }
+    setWardrobeUploading(false);
+    setWardrobeBulkProgress(null);
+    if (wardrobeBulkInput.current) wardrobeBulkInput.current.value = '';
+
+    if (!skipped && !failed) {
+      showToast(`${added} item${added !== 1 ? 's' : ''} added to wardrobe`);
+    } else if (added === 0 && failed === 0) {
+      showToast(arr.length === 1 ? 'Already in your wardrobe' : `All ${arr.length} already in your wardrobe`, 'error');
+    } else {
+      const parts: string[] = [];
+      if (skipped) parts.push(`${skipped} duplicate${skipped !== 1 ? 's' : ''}`);
+      if (failed) parts.push(`${failed} failed`);
+      showToast(`${added} of ${arr.length} added — ${parts.join(' · ')}`, added > 0 ? 'success' : 'error');
+    }
   }
 
   // ─── Render ───────────────────────────────────────────────────────────────
@@ -1023,36 +1101,109 @@ function Popup() {
             {tab === 'wardrobe' && (
               !listsLoaded ? (
                 <div style={{ display: 'flex', justifyContent: 'center', padding: '24px' }}><Spinner /></div>
-              ) : wardrobe.length === 0 ? (
-                <div style={{ textAlign: 'center', padding: '24px 0' }}>
-                  <div style={{ fontSize: '32px', marginBottom: '8px' }}>👕</div>
-                  <div style={{ fontFamily: SERIF, fontSize: '17px', marginBottom: '6px' }}>No wardrobe items</div>
-                  <p style={{ fontSize: '12px', color: C.muted, lineHeight: 1.5, marginBottom: '16px' }}>
-                    Add your own clothes on the dashboard to mix them with wishlist items.
-                  </p>
-                  <button onClick={() => openTab('/dashboard?tab=wardrobe')} style={btnInk}>Add your clothes →</button>
-                </div>
               ) : (
                 <div>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
-                    {wardrobe.map((item) => (
-                      <div key={item.id} style={{ background: C.surface, borderRadius: '0', border: `0.5px solid ${C.border}`, overflow: 'hidden' }}>
-                        <AuthImg
-                          src={item.image_url} token={token} alt={item.name ?? 'Item'}
-                          style={{ width: '100%', height: '110px', objectFit: 'contain', background: C.bone, display: 'block' }}
-                        />
-                        <div style={{ padding: '6px 8px 8px' }}>
-                          {item.category && <StoreTag name={item.category} />}
-                          <div style={{ fontSize: '11px', fontWeight: 600, color: C.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: '2px' }}>
-                            {item.name ?? 'Untitled'}
-                          </div>
-                        </div>
-                      </div>
-                    ))}
+                  {/* Upload row — always visible */}
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '14px' }}>
+                    <button
+                      type="button"
+                      disabled={wardrobeUploading}
+                      onClick={() => wardrobeSingleInput.current?.click()}
+                      style={{
+                        display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+                        gap: '5px', padding: '12px 8px',
+                        border: `1.5px dashed ${C.border}`, background: wardrobeUploading && !wardrobeBulkProgress ? C.stone : C.surface,
+                        cursor: wardrobeUploading ? 'default' : 'pointer', opacity: wardrobeUploading ? 0.7 : 1,
+                      }}
+                    >
+                      {wardrobeUploading && !wardrobeBulkProgress ? (
+                        <>
+                          <Spinner size={16} />
+                          <span style={{ fontFamily: MONO, fontSize: '10px', color: C.muted }}>Analysing…</span>
+                        </>
+                      ) : (
+                        <>
+                          <span style={{ fontSize: '16px' }}>📤</span>
+                          <span style={{ fontFamily: MONO, fontSize: '10px', fontWeight: 600, color: C.ink, letterSpacing: '0.05em', textTransform: 'uppercase' }}>Single</span>
+                          <span style={{ fontFamily: MONO, fontSize: '9px', color: C.muted }}>one photo</span>
+                        </>
+                      )}
+                    </button>
+
+                    <button
+                      type="button"
+                      disabled={wardrobeUploading}
+                      onClick={() => wardrobeBulkInput.current?.click()}
+                      style={{
+                        display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+                        gap: '5px', padding: '12px 8px',
+                        border: `1.5px dashed ${C.border}`, background: wardrobeBulkProgress ? C.stone : C.surface,
+                        cursor: wardrobeUploading ? 'default' : 'pointer', opacity: wardrobeUploading ? 0.7 : 1,
+                      }}
+                    >
+                      {wardrobeBulkProgress ? (
+                        <>
+                          <Spinner size={16} />
+                          <span style={{ fontFamily: MONO, fontSize: '10px', color: C.muted }}>{wardrobeBulkProgress.current} / {wardrobeBulkProgress.total}</span>
+                        </>
+                      ) : (
+                        <>
+                          <span style={{ fontSize: '16px' }}>📦</span>
+                          <span style={{ fontFamily: MONO, fontSize: '10px', fontWeight: 600, color: C.ink, letterSpacing: '0.05em', textTransform: 'uppercase' }}>Bulk</span>
+                          <span style={{ fontFamily: MONO, fontSize: '9px', color: C.muted }}>multiple photos</span>
+                        </>
+                      )}
+                    </button>
+
+                    <input
+                      ref={wardrobeSingleInput}
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp"
+                      style={{ display: 'none' }}
+                      onChange={(e) => handleWardrobeSingle((e.target as HTMLInputElement).files)}
+                    />
+                    <input
+                      ref={wardrobeBulkInput}
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp"
+                      multiple
+                      style={{ display: 'none' }}
+                      onChange={(e) => handleWardrobeBulk((e.target as HTMLInputElement).files)}
+                    />
                   </div>
-                  <button onClick={() => setTab('fitting-room')} style={{ ...btnGhost, marginTop: '12px', width: '100%' }}>
-                    Go to Fitting Room →
-                  </button>
+
+                  {wardrobe.length === 0 ? (
+                    <div style={{ textAlign: 'center', padding: '16px 0' }}>
+                      <div style={{ fontSize: '28px', marginBottom: '6px' }}>👕</div>
+                      <div style={{ fontFamily: SERIF, fontSize: '15px', marginBottom: '4px' }}>No wardrobe items yet</div>
+                      <p style={{ fontSize: '11px', color: C.muted, lineHeight: 1.5, marginBottom: '12px' }}>
+                        Upload photos of clothes you own — mix them with wishlist items in the Fitting Room.
+                      </p>
+                      <button onClick={() => openTab('/dashboard?tab=wardrobe')} style={{ ...btnGhost, fontSize: '10px' }}>Open on dashboard →</button>
+                    </div>
+                  ) : (
+                    <>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                        {wardrobe.map((item) => (
+                          <div key={item.id} style={{ background: C.surface, borderRadius: '0', border: `0.5px solid ${C.border}`, overflow: 'hidden' }}>
+                            <AuthImg
+                              src={item.image_url} token={token} alt={item.name ?? 'Item'}
+                              style={{ width: '100%', height: '110px', objectFit: 'contain', background: C.bone, display: 'block' }}
+                            />
+                            <div style={{ padding: '6px 8px 8px' }}>
+                              {item.category && <StoreTag name={item.category} />}
+                              <div style={{ fontSize: '11px', fontWeight: 600, color: C.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: '2px' }}>
+                                {item.name ?? 'Untitled'}
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                      <button onClick={() => setTab('fitting-room')} style={{ ...btnGhost, marginTop: '12px', width: '100%' }}>
+                        Go to Fitting Room →
+                      </button>
+                    </>
+                  )}
                 </div>
               )
             )}
