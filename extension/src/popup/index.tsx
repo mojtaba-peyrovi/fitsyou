@@ -754,6 +754,7 @@ function Popup() {
   // ── Delete wishlist item ─────────────────────────────────────────────────
   async function handleWishlistDelete(id: string, e: MouseEvent) {
     e.stopPropagation();
+    if (!confirm('Remove this item from your wishlist?')) return;
     const tk = (await getToken()) ?? token;
     if (!tk) return;
     const res = await fetch(`${API_BASE}/api/wishlist/${id}`, {
