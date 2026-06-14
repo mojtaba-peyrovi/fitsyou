@@ -138,7 +138,7 @@ async function apiGet<T>(token: string, path: string): Promise<T[]> {
   } catch { return []; }
 }
 
-async function apiPost(token: string, path: string, body: unknown): Promise<{ ok: boolean; data?: unknown; error?: string }> {
+async function apiPost(token: string, path: string, body: unknown): Promise<{ ok: boolean; data?: unknown; error?: string; code?: string }> {
   try {
     const r = await fetch(`${API_BASE}${path}`, {
       method: 'POST',
@@ -146,7 +146,7 @@ async function apiPost(token: string, path: string, body: unknown): Promise<{ ok
       body: JSON.stringify(body),
     });
     const data = await r.json().catch(() => ({}));
-    if (!r.ok) return { ok: false, error: (data as { error?: string }).error ?? `Error ${r.status}` };
+    if (!r.ok) return { ok: false, error: (data as { error?: string }).error ?? `Error ${r.status}`, code: (data as { code?: string }).code };
     return { ok: true, data };
   } catch { return { ok: false, error: 'Network error — please try again.' }; }
 }
@@ -202,15 +202,24 @@ function StoreTag({ name }: { name: string }) {
   return <div style={{ fontFamily: MONO, fontSize: '9px', letterSpacing: '0.1em', textTransform: 'uppercase', color: C.pinkDark }}>{name}</div>;
 }
 
-function Toast({ msg, type }: { msg: string; type: 'success' | 'error' }) {
+function Toast({ msg, type, onDismiss }: { msg: string; type: 'success' | 'error'; onDismiss?: () => void }) {
   return (
     <div style={{
       background: type === 'success' ? '#dcfce7' : '#fee2e2',
       color: type === 'success' ? '#166534' : '#991b1b',
       borderRadius: '0', padding: '8px 12px', fontSize: '12px',
-      fontWeight: 600, marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '6px',
+      fontWeight: 600, marginBottom: '10px', display: 'flex', alignItems: 'flex-start', gap: '6px',
     }}>
-      {type === 'success' ? '✓' : '!'} {msg}
+      <span style={{ flexShrink: 0 }}>{type === 'success' ? '✓' : '!'}</span>
+      <span style={{ flex: 1, lineHeight: 1.4 }}>{msg}</span>
+      {onDismiss && (
+        <button
+          onClick={onDismiss}
+          style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontSize: '13px', lineHeight: 1, opacity: 0.6, flexShrink: 0, color: 'inherit' }}
+        >
+          ✕
+        </button>
+      )}
     </div>
   );
 }
@@ -576,7 +585,7 @@ function Popup() {
 
   // Action bar state (save-to-wishlist)
   const [saveState, setSaveState]     = useState<'idle' | 'working'>('idle');
-  const [toast, setToast]             = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
+  const [toast, setToast]             = useState<{ msg: string; type: 'success' | 'error'; persistent?: boolean } | null>(null);
   const [currentTabUrl, setCurrentTabUrl] = useState('');
 
   // Wardrobe upload state
@@ -585,9 +594,9 @@ function Popup() {
   const wardrobeSingleInput = useRef<HTMLInputElement>(null);
   const wardrobeBulkInput   = useRef<HTMLInputElement>(null);
 
-  function showToast(msg: string, type: 'success' | 'error' = 'success') {
-    setToast({ msg, type });
-    setTimeout(() => setToast(null), 3000);
+  function showToast(msg: string, type: 'success' | 'error' = 'success', persistent = false) {
+    setToast({ msg, type, persistent });
+    if (!persistent) setTimeout(() => setToast(null), 3000);
   }
 
   async function checkAuth() {
@@ -729,7 +738,10 @@ function Popup() {
     });
 
     setSaveState('idle');
-    if (!res.ok) { showToast(res.error ?? 'Save failed', 'error'); return; }
+    if (!res.ok) {
+      showToast(res.error ?? 'Save failed', 'error', res.code === 'gender_conflict');
+      return;
+    }
 
     const name = normalizedTitle ? `"${normalizedTitle}"` : 'Item';
     const fitMsg = fitResult && fitResult.verdict !== 'unknown' ? ` · ${FIT_BADGE[fitResult.verdict].label}` : '';
@@ -965,7 +977,7 @@ function Popup() {
           {/* Toast */}
           {toast && (
             <div style={{ padding: '8px 16px 0' }}>
-              <Toast msg={toast.msg} type={toast.type} />
+              <Toast msg={toast.msg} type={toast.type} onDismiss={toast.persistent ? () => setToast(null) : undefined} />
             </div>
           )}
 
