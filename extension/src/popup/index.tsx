@@ -751,6 +751,22 @@ function Popup() {
     setTab('wishlist');
   }
 
+  // ── Delete wishlist item ─────────────────────────────────────────────────
+  async function handleWishlistDelete(id: string, e: MouseEvent) {
+    e.stopPropagation();
+    const tk = (await getToken()) ?? token;
+    if (!tk) return;
+    const res = await fetch(`${API_BASE}/api/wishlist/${id}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${tk}` },
+    });
+    if (res.ok) {
+      setWishlist((prev) => prev.filter((w) => w.id !== id));
+    } else {
+      showToast('Could not remove item', 'error');
+    }
+  }
+
   // ── Manual upload fallback ────────────────────────────────────────────────
   async function handleFileUpload(e: Event) {
     const file = (e.target as HTMLInputElement).files?.[0];
@@ -1100,6 +1116,11 @@ function Popup() {
                           <div style={{ fontSize: '10px', color: C.faint, marginTop: '2px' }}>Tap to open →</div>
                         )}
                       </div>
+                      <button
+                        onClick={(e) => handleWishlistDelete(item.id, e as unknown as MouseEvent)}
+                        title="Remove"
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.faint, fontSize: '14px', lineHeight: 1, padding: '4px', flexShrink: 0, alignSelf: 'flex-start' }}
+                      >✕</button>
                     </div>
                   ))}
                   <button onClick={() => setTab('fitting-room')} style={{ ...btnPink, marginTop: '4px' }}>
