@@ -81,6 +81,8 @@ interface WardrobeItem {
   image_url: string;
 }
 
+interface OutfitItemRef { label: string; store: string | null; url: string | null; image: string | null; price?: string | null; }
+
 interface TryOnItem {
   id: string;
   product_title: string | null;
@@ -88,11 +90,18 @@ interface TryOnItem {
   product_image_url: string | null;
   output_image_urls: string[];
   created_at: string;
+  outfit_items?: OutfitItemRef[] | null;
 }
 
 interface ItemRef { source: 'wishlist' | 'wardrobe'; id: string; }
 
 // ─── Utilities ───────────────────────────────────────────────────────────────
+function faviconUrl(productUrl: string): string {
+  try {
+    const { hostname } = new URL(productUrl);
+    return `https://www.google.com/s2/favicons?domain=${hostname}&sz=32`;
+  } catch { return ''; }
+}
 const SUPPORTED_RETAILER_DOMAINS = [
   'zara.com', 'asos.com', 'hm.com',
   'zalando.com', 'zalando.de', 'zalando.co.uk', 'mango.com',
@@ -171,6 +180,27 @@ const FIT_BADGE: Record<FitVerdict, { label: string; bg: string; fg: string }> =
 };
 
 // ─── Sub-components ──────────────────────────────────────────────────────────
+function UploadSvg() {
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+      <polyline points="17 8 12 3 7 8" />
+      <line x1="12" y1="3" x2="12" y2="15" />
+    </svg>
+  );
+}
+
+function BulkUploadSvg() {
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="2" y="7" width="16" height="14" rx="2" />
+      <path d="M6 7V5a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-2" />
+      <polyline points="10 14 10 10 14 10" />
+      <line x1="10" y1="10" x2="6" y2="14" />
+    </svg>
+  );
+}
+
 function AuthImg({ src, token, alt, style }: { src: string | null; token: string; alt: string; style: preact.JSX.CSSProperties }) {
   const [resolved, setResolved] = useState<string | null>(null);
   useEffect(() => {
@@ -365,7 +395,7 @@ function FittingRoom({
         key={item.id}
         onClick={() => toggle(ref)}
         style={{
-          width: '80px', flexShrink: 0, background: C.surface,
+          width: '68px', flexShrink: 0, background: C.surface,
           border: `${on ? 1.5 : 0.5}px solid ${on ? C.pink : C.border}`,
           borderRadius: '0', overflow: 'hidden', cursor: 'pointer',
           textAlign: 'left', padding: 0, position: 'relative',
@@ -373,7 +403,7 @@ function FittingRoom({
       >
         <AuthImg
           src={imgSrc} token={token} alt={label ?? 'Item'}
-          style={{ width: '80px', height: '80px', objectFit: 'cover', display: 'block' }}
+          style={{ width: '68px', height: '100px', objectFit: 'contain', background: C.bone, display: 'block' }}
         />
         {on && (
           <div style={{
@@ -405,7 +435,7 @@ function FittingRoom({
       }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div style={{ fontSize: '12px', fontWeight: 600, color: C.ink, fontFamily: MONO, letterSpacing: '0.06em', textTransform: 'uppercase' }}>
-            Canvas
+            Mirror
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             {(selected.length > 0 || results.length > 0) && (
@@ -479,10 +509,10 @@ function FittingRoom({
           gap: '6px',
         }}>
           {results.map((url, i) => (
-            <div key={i} style={{ position: 'relative', borderRadius: '0', overflow: 'hidden' }}>
+            <div key={i} style={{ position: 'relative', borderRadius: '0', overflow: 'hidden', aspectRatio: '1 / 1' }}>
               <AuthImg
                 src={url} token={token} alt={`Look ${i + 1}`}
-                style={{ width: '100%', height: results.length === 1 ? '260px' : '160px', objectFit: 'cover', display: 'block' }}
+                style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
               />
               <div style={{ position: 'absolute', bottom: '6px', right: '8px', fontSize: '11px', color: '#fff', opacity: 0.92, textShadow: '0 1px 3px rgba(0,0,0,0.5)', display: 'flex', alignItems: 'baseline', lineHeight: 1 }}>
                 <span style={{ fontFamily: SANS, fontWeight: 800, letterSpacing: '-0.01em' }}>fits</span><em style={{ fontFamily: SERIF, fontStyle: 'italic', fontWeight: 600, color: C.pink, fontSize: '1.05em' }}>you</em>
@@ -511,7 +541,7 @@ function FittingRoom({
             borderColor: phase === 'done' ? C.border : undefined,
           }}
         >
-          {phase === 'done' ? '✕ Clear Canvas' : '✦ Generate the look'}
+          {phase === 'done' ? '✕ Clear Mirror' : '✦ Generate the look'}
         </button>
       )}
 
@@ -1046,25 +1076,38 @@ function Popup() {
                     {tryOns.slice(0, 8).map((item) => (
                       <div key={item.id} style={{ background: C.surface, borderRadius: '0', border: `0.5px solid ${C.border}`, overflow: 'hidden' }}>
                         {item.output_image_urls?.[0] ? (
-                          <div style={{ position: 'relative' }}>
+                          <div style={{ position: 'relative', aspectRatio: '1 / 1' }}>
                             <AuthImg
                               src={item.output_image_urls[0]} token={token}
                               alt={item.product_title ?? 'Try-on'}
-                              style={{ width: '100%', height: '130px', objectFit: 'cover', display: 'block' }}
+                              style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
                             />
                             <div style={{ position: 'absolute', bottom: '5px', right: '7px', fontSize: '9px', color: '#fff', opacity: 0.9, display: 'flex', alignItems: 'baseline', lineHeight: 1 }}>
                               <span style={{ fontFamily: SANS, fontWeight: 800, letterSpacing: '-0.01em' }}>fits</span><em style={{ fontFamily: SERIF, fontStyle: 'italic', fontWeight: 600, color: C.pink, fontSize: '1.05em' }}>you</em>
                             </div>
                           </div>
                         ) : (
-                          <div style={{ height: '130px', background: C.bone }} />
+                          <div style={{ aspectRatio: '1 / 1', background: C.bone }} />
                         )}
-                        <div style={{ padding: '6px 8px 8px' }}>
-                          {item.store_name && <StoreTag name={item.store_name} />}
-                          <div style={{ fontSize: '11px', fontWeight: 600, color: C.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: '2px' }}>
-                            {item.product_title ? toSentenceCase(item.product_title) : 'Try-on'}
+                        {item.outfit_items?.length ? (
+                          <div style={{ padding: '5px 6px 7px', display: 'flex', gap: '3px', alignItems: 'center', flexWrap: 'wrap' }}>
+                            {item.outfit_items.slice(0, 5).map((oi, i) => (
+                              oi.image ? (
+                                <AuthImg
+                                  key={i}
+                                  src={oi.image} token={token} alt={oi.label}
+                                  style={{ width: '22px', height: '22px', objectFit: 'cover', flexShrink: 0, border: `0.5px solid ${C.border}` }}
+                                />
+                              ) : oi.url ? (
+                                <img
+                                  key={i}
+                                  src={faviconUrl(oi.url)} alt={oi.store ?? ''}
+                                  style={{ width: '16px', height: '16px', objectFit: 'contain', flexShrink: 0 }}
+                                />
+                              ) : null
+                            ))}
                           </div>
-                        </div>
+                        ) : null}
                       </div>
                     ))}
                   </div>
@@ -1097,10 +1140,15 @@ function Popup() {
                     >
                       <AuthImg
                         src={item.product_image_url} token={token} alt={item.product_title ?? 'Item'}
-                        style={{ width: '56px', height: '56px', borderRadius: '0', objectFit: 'cover', flexShrink: 0 }}
+                        style={{ width: '56px', height: '80px', borderRadius: '0', objectFit: 'contain', background: C.bone, flexShrink: 0 }}
                       />
                       <div style={{ flex: 1, minWidth: 0 }}>
-                        {item.store_name && <StoreTag name={item.store_name} />}
+                        {item.product_url && (
+                          <img
+                            src={faviconUrl(item.product_url)} alt={item.store_name ?? ''}
+                            style={{ width: '16px', height: '16px', objectFit: 'contain', display: 'block', marginBottom: '3px' }}
+                          />
+                        )}
                         <div style={{ fontSize: '12px', fontWeight: 600, color: C.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: '2px' }}>
                           {item.product_title ? toSentenceCase(item.product_title) : 'Untitled item'}
                         </div>
@@ -1157,8 +1205,8 @@ function Popup() {
                         </>
                       ) : (
                         <>
-                          <span style={{ fontSize: '16px' }}>📤</span>
-                          <span style={{ fontFamily: MONO, fontSize: '10px', fontWeight: 600, color: C.ink, letterSpacing: '0.05em', textTransform: 'uppercase' }}>Single</span>
+                          <span style={{ color: C.muted }}><UploadSvg /></span>
+                          <span style={{ fontFamily: MONO, fontSize: '10px', fontWeight: 600, color: C.ink, letterSpacing: '0.05em', textTransform: 'uppercase' }}>Single Upload</span>
                           <span style={{ fontFamily: MONO, fontSize: '9px', color: C.muted }}>one photo</span>
                         </>
                       )}
@@ -1182,8 +1230,8 @@ function Popup() {
                         </>
                       ) : (
                         <>
-                          <span style={{ fontSize: '16px' }}>📦</span>
-                          <span style={{ fontFamily: MONO, fontSize: '10px', fontWeight: 600, color: C.ink, letterSpacing: '0.05em', textTransform: 'uppercase' }}>Bulk</span>
+                          <span style={{ color: C.muted }}><BulkUploadSvg /></span>
+                          <span style={{ fontFamily: MONO, fontSize: '10px', fontWeight: 600, color: C.ink, letterSpacing: '0.05em', textTransform: 'uppercase' }}>Bulk Upload</span>
                           <span style={{ fontFamily: MONO, fontSize: '9px', color: C.muted }}>multiple photos</span>
                         </>
                       )}
