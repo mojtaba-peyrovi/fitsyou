@@ -509,10 +509,10 @@ function FittingRoom({
           gap: '6px',
         }}>
           {results.map((url, i) => (
-            <div key={i} style={{ position: 'relative', borderRadius: '0', overflow: 'hidden', aspectRatio: '1 / 1' }}>
+            <div key={i} style={{ position: 'relative', borderRadius: '0', overflow: 'hidden', paddingBottom: '100%', height: 0 }}>
               <AuthImg
                 src={url} token={token} alt={`Look ${i + 1}`}
-                style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
               />
               <div style={{ position: 'absolute', bottom: '6px', right: '8px', fontSize: '11px', color: '#fff', opacity: 0.92, textShadow: '0 1px 3px rgba(0,0,0,0.5)', display: 'flex', alignItems: 'baseline', lineHeight: 1 }}>
                 <span style={{ fontFamily: SANS, fontWeight: 800, letterSpacing: '-0.01em' }}>fits</span><em style={{ fontFamily: SERIF, fontStyle: 'italic', fontWeight: 600, color: C.pink, fontSize: '1.05em' }}>you</em>
@@ -617,6 +617,10 @@ function Popup() {
   const [saveState, setSaveState]     = useState<'idle' | 'working'>('idle');
   const [toast, setToast]             = useState<{ msg: string; type: 'success' | 'error'; persistent?: boolean } | null>(null);
   const [currentTabUrl, setCurrentTabUrl] = useState('');
+
+  // Back-to-top
+  const tabScrollRef = useRef<HTMLDivElement>(null);
+  const [showBackToTop, setShowBackToTop] = useState(false);
 
   // Wardrobe upload state
   const [wardrobeUploading, setWardrobeUploading]         = useState(false);
@@ -1056,7 +1060,11 @@ function Popup() {
           </div>
 
           {/* Tab content */}
-          <div style={{ padding: '14px 16px 16px', flex: 1, overflowY: 'auto', minHeight: 0 }}>
+          <div
+            ref={tabScrollRef}
+            onScroll={(e) => setShowBackToTop((e.currentTarget as HTMLDivElement).scrollTop > 60)}
+            style={{ padding: '14px 16px 16px', flex: 1, overflowY: 'auto', minHeight: 0, position: 'relative' }}
+          >
 
             {/* ── Try-ons tab ── */}
             {tab === 'tryons' && (
@@ -1076,38 +1084,34 @@ function Popup() {
                     {tryOns.slice(0, 8).map((item) => (
                       <div key={item.id} style={{ background: C.surface, borderRadius: '0', border: `0.5px solid ${C.border}`, overflow: 'hidden' }}>
                         {item.output_image_urls?.[0] ? (
-                          <div style={{ position: 'relative', aspectRatio: '1 / 1' }}>
+                          <div style={{ position: 'relative', paddingBottom: '100%', height: 0, overflow: 'hidden' }}>
                             <AuthImg
                               src={item.output_image_urls[0]} token={token}
                               alt={item.product_title ?? 'Try-on'}
-                              style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                              style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
                             />
                             <div style={{ position: 'absolute', bottom: '5px', right: '7px', fontSize: '9px', color: '#fff', opacity: 0.9, display: 'flex', alignItems: 'baseline', lineHeight: 1 }}>
                               <span style={{ fontFamily: SANS, fontWeight: 800, letterSpacing: '-0.01em' }}>fits</span><em style={{ fontFamily: SERIF, fontStyle: 'italic', fontWeight: 600, color: C.pink, fontSize: '1.05em' }}>you</em>
                             </div>
                           </div>
                         ) : (
-                          <div style={{ aspectRatio: '1 / 1', background: C.bone }} />
+                          <div style={{ paddingBottom: '100%', background: C.bone }} />
                         )}
-                        {item.outfit_items?.length ? (
-                          <div style={{ padding: '5px 6px 7px', display: 'flex', gap: '3px', alignItems: 'center', flexWrap: 'wrap' }}>
-                            {item.outfit_items.slice(0, 5).map((oi, i) => (
-                              oi.image ? (
-                                <AuthImg
-                                  key={i}
-                                  src={oi.image} token={token} alt={oi.label}
-                                  style={{ width: '22px', height: '22px', objectFit: 'cover', flexShrink: 0, border: `0.5px solid ${C.border}` }}
-                                />
-                              ) : oi.url ? (
+                        {(() => {
+                          const logos = (item.outfit_items ?? []).filter(oi => oi.url).map(oi => oi.url!);
+                          const unique = [...new Set(logos)].slice(0, 5);
+                          return unique.length ? (
+                            <div style={{ padding: '5px 6px 7px', display: 'flex', gap: '4px', alignItems: 'center' }}>
+                              {unique.map((url, i) => (
                                 <img
                                   key={i}
-                                  src={faviconUrl(oi.url)} alt={oi.store ?? ''}
-                                  style={{ width: '16px', height: '16px', objectFit: 'contain', flexShrink: 0 }}
+                                  src={faviconUrl(url)} alt=""
+                                  style={{ width: '18px', height: '18px', objectFit: 'contain', flexShrink: 0 }}
                                 />
-                              ) : null
-                            ))}
-                          </div>
-                        ) : null}
+                              ))}
+                            </div>
+                          ) : null;
+                        })()}
                       </div>
                     ))}
                   </div>
@@ -1304,6 +1308,23 @@ function Popup() {
                 />
               )}
             </div>
+
+            {/* ── Back to top ── */}
+            {showBackToTop && tab !== 'fitting-room' && (
+              <button
+                onClick={() => tabScrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' })}
+                style={{
+                  position: 'fixed', bottom: '18px', right: '18px',
+                  width: '30px', height: '30px', borderRadius: '50%',
+                  background: C.ink, color: '#fff', border: 'none',
+                  cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: '14px', boxShadow: '0 2px 8px rgba(0,0,0,0.28)',
+                  zIndex: 200, flexShrink: 0,
+                  animation: 'fadeSlideUp 0.18s ease both',
+                }}
+                title="Back to top"
+              >↑</button>
+            )}
 
           </div>
         </div>
