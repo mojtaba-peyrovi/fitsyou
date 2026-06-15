@@ -639,6 +639,9 @@ function Popup() {
   const [toast, setToast]             = useState<{ msg: string; type: 'success' | 'error'; persistent?: boolean } | null>(null);
   const [currentTabUrl, setCurrentTabUrl] = useState('');
 
+  // Try-on lightbox
+  const [lightbox, setLightbox] = useState<{ src: string; token: string } | null>(null);
+
   // Back-to-top
   const tabScrollRef = useRef<HTMLDivElement>(null);
   const [showBackToTop, setShowBackToTop] = useState(false);
@@ -937,7 +940,44 @@ function Popup() {
 
   // ─── Render ───────────────────────────────────────────────────────────────
   return (
-    <div style={{ width: '360px', fontFamily: SANS, background: C.bone, color: C.ink }}>
+    <div style={{ width: '360px', fontFamily: SANS, background: C.bone, color: C.ink, position: 'relative' }}>
+
+      {/* ── Try-on lightbox ── */}
+      {lightbox && (
+        <div
+          onClick={() => setLightbox(null)}
+          style={{
+            position: 'fixed', inset: 0, zIndex: 1000,
+            background: 'rgba(22,22,22,0.92)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{ position: 'relative', width: '320px', maxHeight: '320px' }}
+          >
+            <AuthImg
+              src={lightbox.src} token={lightbox.token} alt="Try-on"
+              style={{ width: '320px', height: '320px', objectFit: 'contain', display: 'block' }}
+            />
+            {/* Watermark */}
+            <div style={{ position: 'absolute', bottom: '10px', right: '12px', fontSize: '13px', color: '#fff', opacity: 0.95, textShadow: '0 1px 4px rgba(0,0,0,0.6)', display: 'flex', alignItems: 'baseline', lineHeight: 1 }}>
+              <span style={{ fontFamily: SANS, fontWeight: 800, letterSpacing: '-0.01em' }}>fits</span><em style={{ fontFamily: SERIF, fontStyle: 'italic', fontWeight: 600, color: C.pink, fontSize: '1.1em' }}>you</em>
+            </div>
+            {/* Close button */}
+            <button
+              onClick={() => setLightbox(null)}
+              style={{
+                position: 'absolute', top: '-12px', right: '-12px',
+                width: '28px', height: '28px', borderRadius: '50%',
+                background: C.ink, color: '#fff', border: 'none',
+                cursor: 'pointer', fontSize: '16px', lineHeight: 1,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}
+            >×</button>
+          </div>
+        </div>
+      )}
 
       {/* Header */}
       <div style={{ background: C.ink, padding: '12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -1118,16 +1158,21 @@ function Popup() {
                     {tryOns.slice(0, 8).map((item) => (
                       <div key={item.id} style={{ background: C.surface, borderRadius: '0', border: `0.5px solid ${C.border}`, overflow: 'hidden' }}>
                         {item.output_image_urls?.[0] ? (
-                          <div style={{ position: 'relative', paddingBottom: '100%', height: 0, overflow: 'hidden' }}>
-                            <AuthImg
-                              src={item.output_image_urls[0]} token={token}
-                              alt={item.product_title ?? 'Try-on'}
-                              style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, width: '100%', objectFit: 'cover', display: 'block' }}
-                            />
-                            <div style={{ position: 'absolute', bottom: '5px', right: '7px', fontSize: '9px', color: '#fff', opacity: 0.9, display: 'flex', alignItems: 'baseline', lineHeight: 1 }}>
-                              <span style={{ fontFamily: SANS, fontWeight: 800, letterSpacing: '-0.01em' }}>fits</span><em style={{ fontFamily: SERIF, fontStyle: 'italic', fontWeight: 600, color: C.pink, fontSize: '1.05em' }}>you</em>
+                          <button
+                            onClick={() => setLightbox({ src: item.output_image_urls[0], token })}
+                            style={{ display: 'block', width: '100%', padding: 0, border: 'none', background: 'none', cursor: 'zoom-in' }}
+                          >
+                            <div style={{ position: 'relative', paddingBottom: '100%', height: 0, overflow: 'hidden' }}>
+                              <AuthImg
+                                src={item.output_image_urls[0]} token={token}
+                                alt={item.product_title ?? 'Try-on'}
+                                style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, width: '100%', objectFit: 'cover', display: 'block' }}
+                              />
+                              <div style={{ position: 'absolute', bottom: '5px', right: '7px', fontSize: '9px', color: '#fff', opacity: 0.9, display: 'flex', alignItems: 'baseline', lineHeight: 1 }}>
+                                <span style={{ fontFamily: SANS, fontWeight: 800, letterSpacing: '-0.01em' }}>fits</span><em style={{ fontFamily: SERIF, fontStyle: 'italic', fontWeight: 600, color: C.pink, fontSize: '1.05em' }}>you</em>
+                              </div>
                             </div>
-                          </div>
+                          </button>
                         ) : (
                           <div style={{ paddingBottom: '100%', background: C.bone }} />
                         )}
