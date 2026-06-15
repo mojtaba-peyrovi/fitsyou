@@ -236,7 +236,7 @@ __webpack_require__.r(__webpack_exports__);
 
 
 (0,_analytics__WEBPACK_IMPORTED_MODULE_3__.initAnalytics)();
-const API_BASE = 'https://fitsyou-web.vercel.app';
+const API_BASE = 'https://fitsyou.live';
 // ─── Brand tokens — v3 "Soft Cool Stone" ─────────────────────────────────────
 const C = {
     pink: '#FF2E88',

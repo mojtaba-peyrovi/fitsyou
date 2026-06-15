@@ -4,7 +4,7 @@ import { initAnalytics, identifyUser, capture } from '../analytics';
 
 initAnalytics();
 
-const API_BASE = 'https://fitsyou-web.vercel.app';
+const API_BASE = 'https://fitsyou.live';
 
 // ─── Brand tokens — v3 "Soft Cool Stone" ─────────────────────────────────────
 const C = {
