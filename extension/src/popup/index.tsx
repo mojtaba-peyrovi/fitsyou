@@ -581,10 +581,6 @@ function FittingRoom({
         </button>
       )}
 
-      <button onClick={onOpenDashboard} style={{ ...btnGhost, marginTop: '-4px' }}>
-        Open full Fitting Room →
-      </button>
-
       {/* Wishlist picker */}
       <div>
         <div style={{ fontFamily: MONO, fontSize: '9px', letterSpacing: '0.1em', textTransform: 'uppercase', color: C.muted, marginBottom: '8px' }}>
@@ -600,7 +596,7 @@ function FittingRoom({
       </div>
 
       {/* Wardrobe picker */}
-      <div style={{ marginBottom: '8px' }}>
+      <div>
         <div style={{ fontFamily: MONO, fontSize: '9px', letterSpacing: '0.1em', textTransform: 'uppercase', color: C.muted, marginBottom: '8px' }}>
           From your wardrobe
         </div>
@@ -612,6 +608,10 @@ function FittingRoom({
           </div>
         )}
       </div>
+
+      <button onClick={onOpenDashboard} style={{ ...btnGhost, marginTop: '4px' }}>
+        Open full Fitting Room →
+      </button>
 
     </div>
   );
@@ -1132,14 +1132,18 @@ function Popup() {
                           <div style={{ paddingBottom: '100%', background: C.bone }} />
                         )}
                         {(() => {
-                          const logos = (item.outfit_items ?? []).filter(oi => oi.url).map(oi => oi.url!);
-                          const unique = [...new Set(logos)].slice(0, 5);
-                          return unique.length ? (
+                          const seen = new Set<string>();
+                          const hosts = (item.outfit_items ?? [])
+                            .filter(oi => oi.url)
+                            .map(oi => { try { return new URL(oi.url!).hostname; } catch { return null; } })
+                            .filter((h): h is string => !!h && !seen.has(h) && !!seen.add(h))
+                            .slice(0, 5);
+                          return hosts.length ? (
                             <div style={{ padding: '5px 6px 7px', display: 'flex', gap: '4px', alignItems: 'center' }}>
-                              {unique.map((url, i) => (
+                              {hosts.map((host, i) => (
                                 <img
                                   key={i}
-                                  src={faviconUrl(url)} alt=""
+                                  src={`https://www.google.com/s2/favicons?domain=${host}&sz=32`} alt=""
                                   style={{ width: '18px', height: '18px', objectFit: 'contain', flexShrink: 0 }}
                                 />
                               ))}
