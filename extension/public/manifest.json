@@ -56,6 +56,7 @@
   },
   "externally_connectable": {
     "matches": [
+      "https://fitsyou.live/*",
       "https://fitsyou-web.vercel.app/*",
       "http://localhost:3000/*"
     ]
