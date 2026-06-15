@@ -427,12 +427,9 @@ function FittingRoom({
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
 
-      {/* Canvas */}
-      <div style={{
-        background: C.stone,
-        borderRadius: '0', padding: '14px', minHeight: '80px',
-        display: 'flex', flexDirection: 'column', gap: '8px',
-      }}>
+      {/* Mirror */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+        {/* Header */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div style={{ fontSize: '12px', fontWeight: 600, color: C.ink, fontFamily: MONO, letterSpacing: '0.06em', textTransform: 'uppercase' }}>
             Mirror
@@ -452,75 +449,99 @@ function FittingRoom({
           </div>
         </div>
 
-        {selected.length === 0 ? (
-          <div style={{ fontSize: '12px', color: C.muted, lineHeight: 1.5, textAlign: 'center', padding: '8px 0' }}>
-            Pick pieces from your wishlist and wardrobe below to build a look
-          </div>
-        ) : (
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-            {selected.map((ref) => {
-              const item = ref.source === 'wishlist'
-                ? wishlist.find((w) => w.id === ref.id)
-                : wardrobe.find((w) => w.id === ref.id);
-              const rawLabel = item
-                ? (ref.source === 'wishlist' ? (item as WishlistItem).product_title : (item as WardrobeItem).name)
-                : null;
-              const label = rawLabel ? toSentenceCase(rawLabel) : (rawLabel ?? ref.id.slice(0, 6));
-              return (
-                <span
-                  key={`${ref.source}:${ref.id}`}
-                  style={{
-                    display: 'inline-flex', alignItems: 'center', gap: '5px',
-                    padding: '3px 8px 3px 10px', borderRadius: '100px',
-                    background: 'rgba(18,18,18,0.72)', color: C.bone,
-                    fontSize: '11px', maxWidth: '130px',
-                  }}
-                >
-                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label ?? 'Item'}</span>
-                  <button
-                    onClick={() => toggle(ref)}
-                    style={{ background: 'none', border: 'none', padding: '0 0 0 2px', cursor: 'pointer', color: C.faint, fontSize: '13px', lineHeight: 1, flexShrink: 0 }}
-                  >×</button>
-                </span>
-              );
-            })}
-          </div>
-        )}
-
-        {/* Generating progress */}
-        {phase === 'generating' && (
-          <div style={{ marginTop: '4px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-              <span style={{ fontFamily: MONO, fontSize: '10px', color: C.muted }}>Generating…</span>
-              <span style={{ fontFamily: MONO, fontSize: '10px', color: C.muted }}>{Math.round(progress)}%</span>
-            </div>
-            <div style={{ background: 'rgba(18,18,18,0.15)', borderRadius: '4px', height: '4px', overflow: 'hidden' }}>
-              <div style={{ height: '100%', background: C.pink, width: `${progress}%`, transition: 'width 0.3s ease', borderRadius: '4px' }} />
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Result images */}
-      {phase === 'done' && results.length > 0 && (
+        {/* Big square canvas */}
         <div style={{
-          display: 'grid',
-          gridTemplateColumns: results.length === 1 ? '1fr' : '1fr 1fr',
-          gap: '6px',
+          position: 'relative', width: '100%', paddingBottom: '100%', overflow: 'hidden',
+          background: 'linear-gradient(155deg, #EEF1EE 0%, #D8DEDB 52%, #9FA8A3 100%)',
+          boxShadow: 'inset 0 0 48px rgba(22,22,22,0.06)',
         }}>
-          {results.map((url, i) => (
-            <div key={i} style={{ position: 'relative', borderRadius: '0', overflow: 'hidden', paddingBottom: '100%', height: 0 }}>
-              <AuthImg
-                src={url} token={token} alt={`Look ${i + 1}`}
-                style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, width: '100%', objectFit: 'cover', display: 'block' }}
-              />
+          <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+
+            {/* State: result, ready, or empty */}
+            {phase === 'done' && results.length > 0 ? (
+              results.length === 1 ? (
+                <AuthImg
+                  src={results[0]} token={token} alt="Generated outfit"
+                  style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, width: '100%', objectFit: 'contain', display: 'block' }}
+                />
+              ) : (
+                <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '3px' }}>
+                  {results.map((url, i) => (
+                    <AuthImg key={i} src={url} token={token} alt={`Look ${i + 1}`} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                  ))}
+                </div>
+              )
+            ) : selected.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '0 28px' }}>
+                <div style={{ fontSize: '40px', opacity: 0.5 }}>🪞</div>
+                <div style={{ marginTop: '10px', fontSize: '12px', color: C.slate, lineHeight: 1.5 }}>
+                  Pick pieces from your wishlist or wardrobe to start building your look.
+                </div>
+              </div>
+            ) : (
+              <div style={{ textAlign: 'center', padding: '0 28px' }}>
+                <div style={{ fontSize: '40px' }}>🎨</div>
+                <div style={{ marginTop: '10px', fontSize: '12px', color: C.slate, lineHeight: 1.5 }}>
+                  Ready when you are — hit Generate to see it on you.
+                </div>
+              </div>
+            )}
+
+            {/* fitsyou watermark on result */}
+            {phase === 'done' && results.length > 0 && (
               <div style={{ position: 'absolute', bottom: '6px', right: '8px', fontSize: '11px', color: '#fff', opacity: 0.92, textShadow: '0 1px 3px rgba(0,0,0,0.5)', display: 'flex', alignItems: 'baseline', lineHeight: 1 }}>
                 <span style={{ fontFamily: SANS, fontWeight: 800, letterSpacing: '-0.01em' }}>fits</span><em style={{ fontFamily: SERIF, fontStyle: 'italic', fontWeight: 600, color: C.pink, fontSize: '1.05em' }}>you</em>
               </div>
-            </div>
-          ))}
+            )}
+
+            {/* Selected chips overlay (while staging) */}
+            {selected.length > 0 && !(phase === 'done' && results.length > 0) && phase !== 'generating' && (
+              <div style={{ position: 'absolute', left: '8px', right: '8px', bottom: '8px', display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                {selected.map((ref) => {
+                  const item = ref.source === 'wishlist'
+                    ? wishlist.find((w) => w.id === ref.id)
+                    : wardrobe.find((w) => w.id === ref.id);
+                  const rawLabel = item
+                    ? (ref.source === 'wishlist' ? (item as WishlistItem).product_title : (item as WardrobeItem).name)
+                    : null;
+                  const label = rawLabel ? toSentenceCase(rawLabel) : (rawLabel ?? ref.id.slice(0, 6));
+                  return (
+                    <span
+                      key={`${ref.source}:${ref.id}`}
+                      style={{
+                        display: 'inline-flex', alignItems: 'center', gap: '5px',
+                        padding: '3px 8px 3px 10px', borderRadius: '100px',
+                        background: 'rgba(18,18,18,0.82)', color: C.bone,
+                        fontSize: '11px', maxWidth: '150px',
+                      }}
+                    >
+                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label ?? 'Item'}</span>
+                      <button
+                        onClick={() => toggle(ref)}
+                        style={{ background: 'none', border: 'none', padding: '0 0 0 2px', cursor: 'pointer', color: C.faint, fontSize: '13px', lineHeight: 1, flexShrink: 0 }}
+                      >×</button>
+                    </span>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* Generating progress overlay */}
+            {phase === 'generating' && (
+              <div style={{ position: 'absolute', left: '16px', right: '16px', bottom: '16px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                  <span style={{ fontFamily: MONO, fontSize: '10px', color: C.ink }}>Generating…</span>
+                  <span style={{ fontFamily: MONO, fontSize: '10px', color: C.ink }}>{Math.round(progress)}%</span>
+                </div>
+                <div style={{ background: 'rgba(18,18,18,0.18)', borderRadius: '4px', height: '4px', overflow: 'hidden' }}>
+                  <div style={{ height: '100%', background: C.pink, width: `${progress}%`, transition: 'width 0.3s ease', borderRadius: '4px' }} />
+                </div>
+              </div>
+            )}
+
+          </div>
         </div>
-      )}
+      </div>
 
       {error && (
         <div style={{ background: '#fee2e2', color: '#991b1b', borderRadius: '0', padding: '9px 12px', fontSize: '12px', lineHeight: 1.4 }}>
