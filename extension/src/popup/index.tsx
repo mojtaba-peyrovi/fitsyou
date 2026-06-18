@@ -642,6 +642,9 @@ function Popup() {
   // Try-on lightbox
   const [lightbox, setLightbox] = useState<{ src: string; token: string } | null>(null);
 
+  // Confirm dialog for poor-fit wishlist saves
+  const [fitConfirm, setFitConfirm] = useState<{ ext: ExtractResult; tabUrl: string; tk: string; fitResult: FitResult } | null>(null);
+
   // Back-to-top
   const tabScrollRef = useRef<HTMLDivElement>(null);
   const [showBackToTop, setShowBackToTop] = useState(false);
@@ -797,6 +800,18 @@ function Popup() {
       if (fr.ok) fitResult = await fr.json() as FitResult;
     } catch { /* non-blocking */ }
 
+    // Sizing explicitly doesn't match — confirm with the user before saving
+    if (fitResult?.verdict === 'poor') {
+      setSaveState('idle');
+      setFitConfirm({ ext, tabUrl, tk, fitResult });
+      return;
+    }
+
+    await saveWishlistItem(ext, tabUrl, tk, fitResult);
+  }
+
+  async function saveWishlistItem(ext: ExtractResult, tabUrl: string, tk: string, fitResult: FitResult | null) {
+    setSaveState('working');
     const normalizedTitle = ext.productTitle ? toSentenceCase(ext.productTitle) : null;
     const res = await apiPost(tk, '/api/wishlist', {
       product_url: tabUrl,
@@ -975,6 +990,38 @@ function Popup() {
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
               }}
             >×</button>
+          </div>
+        </div>
+      )}
+
+      {/* ── Poor-fit confirm dialog ── */}
+      {fitConfirm && (
+        <div
+          style={{
+            position: 'fixed', inset: 0, zIndex: 1000,
+            background: 'rgba(22,22,22,0.92)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}
+        >
+          <div style={{ width: '300px', background: C.bone, padding: '20px', boxSizing: 'border-box' }}>
+            <div style={{ fontSize: '13px', fontWeight: 700, color: C.ink, marginBottom: '8px' }}>
+              {FIT_BADGE.poor.label}
+            </div>
+            <div style={{ fontSize: '12px', color: C.ink, opacity: 0.85, marginBottom: '16px', lineHeight: 1.5 }}>
+              {fitConfirm.fitResult.reason || 'This size doesn’t match your measurements.'} Add it to your wishlist anyway?
+            </div>
+            <button
+              style={btnPink}
+              onClick={() => {
+                const { ext, tabUrl, tk, fitResult } = fitConfirm;
+                setFitConfirm(null);
+                saveWishlistItem(ext, tabUrl, tk, fitResult);
+              }}
+            >Add anyway</button>
+            <button
+              style={{ ...btnGhost, marginTop: '8px' }}
+              onClick={() => setFitConfirm(null)}
+            >Cancel</button>
           </div>
         </div>
       )}

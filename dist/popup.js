@@ -607,6 +607,8 @@ function Popup() {
     const [currentTabUrl, setCurrentTabUrl] = (0,preact_hooks__WEBPACK_IMPORTED_MODULE_2__.useState)('');
     // Try-on lightbox
     const [lightbox, setLightbox] = (0,preact_hooks__WEBPACK_IMPORTED_MODULE_2__.useState)(null);
+    // Confirm dialog for poor-fit wishlist saves
+    const [fitConfirm, setFitConfirm] = (0,preact_hooks__WEBPACK_IMPORTED_MODULE_2__.useState)(null);
     // Back-to-top
     const tabScrollRef = (0,preact_hooks__WEBPACK_IMPORTED_MODULE_2__.useRef)(null);
     const [showBackToTop, setShowBackToTop] = (0,preact_hooks__WEBPACK_IMPORTED_MODULE_2__.useState)(false);
@@ -773,6 +775,16 @@ function Popup() {
                 fitResult = await fr.json();
         }
         catch { /* non-blocking */ }
+        // Sizing explicitly doesn't match — confirm with the user before saving
+        if (fitResult?.verdict === 'poor') {
+            setSaveState('idle');
+            setFitConfirm({ ext, tabUrl, tk, fitResult });
+            return;
+        }
+        await saveWishlistItem(ext, tabUrl, tk, fitResult);
+    }
+    async function saveWishlistItem(ext, tabUrl, tk, fitResult) {
+        setSaveState('working');
         const normalizedTitle = ext.productTitle ? toSentenceCase(ext.productTitle) : null;
         const res = await apiPost(tk, '/api/wishlist', {
             product_url: tabUrl,
@@ -955,7 +967,15 @@ function Popup() {
                                 background: C.ink, color: '#fff', border: 'none',
                                 cursor: 'pointer', fontSize: '16px', lineHeight: 1,
                                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            }, children: "\u00D7" })] }) })), (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("div", { style: { background: C.ink, padding: '12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }, children: [(0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("div", { style: { fontSize: '22px', lineHeight: 1, display: 'flex', alignItems: 'baseline' }, children: [(0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("span", { style: { fontFamily: SANS, fontWeight: 800, color: '#fff', letterSpacing: '-0.01em' }, children: "fits" }), (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("em", { style: { fontFamily: SERIF, fontStyle: 'italic', fontWeight: 600, color: C.pink, fontSize: '1.05em' }, children: "you" })] }), (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("button", { onClick: () => window.close(), title: "Close", style: { background: 'none', border: 'none', padding: '4px 6px', cursor: 'pointer', color: C.muted, fontSize: '18px', lineHeight: 1 }, children: "\u00D7" })] }), status === 'idle' && ((0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("div", { style: { background: C.ink, borderTop: `0.5px solid rgba(255,255,255,0.08)`, padding: '8px 16px', display: 'flex', alignItems: 'center', gap: '8px' }, children: [(userFaceUrl ?? userPhotoUrl) ? ((0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)(AuthImg, { src: userFaceUrl ?? userPhotoUrl, token: token, alt: "You", style: { width: '22px', height: '22px', borderRadius: '50%', objectFit: 'cover', flexShrink: 0 } })) : ((0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("div", { style: { width: '22px', height: '22px', borderRadius: '50%', background: 'rgba(255,255,255,0.1)', flexShrink: 0 } })), (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("div", { style: { fontFamily: MONO, fontSize: '10px', color: C.muted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }, children: userEmail }), (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("div", { style: {
+                            }, children: "\u00D7" })] }) })), fitConfirm && ((0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("div", { style: {
+                    position: 'fixed', inset: 0, zIndex: 1000,
+                    background: 'rgba(22,22,22,0.92)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                }, children: (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("div", { style: { width: '300px', background: C.bone, padding: '20px', boxSizing: 'border-box' }, children: [(0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("div", { style: { fontSize: '13px', fontWeight: 700, color: C.ink, marginBottom: '8px' }, children: FIT_BADGE.poor.label }), (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("div", { style: { fontSize: '12px', color: C.ink, opacity: 0.85, marginBottom: '16px', lineHeight: 1.5 }, children: [fitConfirm.fitResult.reason || 'This size doesn’t match your measurements.', " Add it to your wishlist anyway?"] }), (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("button", { style: btnPink, onClick: () => {
+                                const { ext, tabUrl, tk, fitResult } = fitConfirm;
+                                setFitConfirm(null);
+                                saveWishlistItem(ext, tabUrl, tk, fitResult);
+                            }, children: "Add anyway" }), (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("button", { style: { ...btnGhost, marginTop: '8px' }, onClick: () => setFitConfirm(null), children: "Cancel" })] }) })), (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("div", { style: { background: C.ink, padding: '12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }, children: [(0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("div", { style: { fontSize: '22px', lineHeight: 1, display: 'flex', alignItems: 'baseline' }, children: [(0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("span", { style: { fontFamily: SANS, fontWeight: 800, color: '#fff', letterSpacing: '-0.01em' }, children: "fits" }), (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("em", { style: { fontFamily: SERIF, fontStyle: 'italic', fontWeight: 600, color: C.pink, fontSize: '1.05em' }, children: "you" })] }), (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("button", { onClick: () => window.close(), title: "Close", style: { background: 'none', border: 'none', padding: '4px 6px', cursor: 'pointer', color: C.muted, fontSize: '18px', lineHeight: 1 }, children: "\u00D7" })] }), status === 'idle' && ((0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("div", { style: { background: C.ink, borderTop: `0.5px solid rgba(255,255,255,0.08)`, padding: '8px 16px', display: 'flex', alignItems: 'center', gap: '8px' }, children: [(userFaceUrl ?? userPhotoUrl) ? ((0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)(AuthImg, { src: userFaceUrl ?? userPhotoUrl, token: token, alt: "You", style: { width: '22px', height: '22px', borderRadius: '50%', objectFit: 'cover', flexShrink: 0 } })) : ((0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("div", { style: { width: '22px', height: '22px', borderRadius: '50%', background: 'rgba(255,255,255,0.1)', flexShrink: 0 } })), (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("div", { style: { fontFamily: MONO, fontSize: '10px', color: C.muted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }, children: userEmail }), (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("div", { style: {
                             fontFamily: MONO, fontSize: '8px', letterSpacing: '0.08em', textTransform: 'uppercase',
                             padding: '2px 8px', borderRadius: '100px', flexShrink: 0,
                             background: subscriptionTier === 'free' ? 'rgba(255,255,255,0.08)' : C.pink,
