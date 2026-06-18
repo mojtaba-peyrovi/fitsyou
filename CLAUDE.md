@@ -9,24 +9,24 @@
 - No Tailwind inside the extension popup — use scoped CSS with shared design tokens. (Tailwind in the Next.js web app is fine.)
 - Brand assets live in `fitsyou-web-app/branding`. Do not redesign or reinterpret.
 
-## Monday.com sync (automatic, no prompt needed)
+## ClickUp sync (automatic, no prompt needed)
 
-The Monday.com board for this project is at:
-**https://mojtabapeyrovis-team.monday.com/boards/5097397427**
+The ClickUp folder for this project is at:
+**https://app.clickup.com/90121823189/v/o/f/901211743712** (folder "fitsyou.live - v1 Build Plan", workspace 90121823189, space 90127948628 "Team Space")
 
-**Any time PLAN.md is updated — for any reason — the corresponding Monday.com board items must be updated in the same response, without being asked.**
+**Any time PLAN.md is updated — for any reason — the corresponding ClickUp tasks must be updated in the same response, without being asked.**
 
 This includes:
 - Marking tasks Done when work is confirmed complete
-- Adding new board items when new tasks are added to PLAN.md
-- Updating item notes/descriptions when task detail changes
-- Reflecting any scope, status, or week assignment changes
+- Adding new tasks when new work is added to PLAN.md
+- Updating task descriptions when task detail changes
+- Reflecting any scope, status, or week assignment changes (lists in the folder mirror week assignments, e.g. "Wk 8", plus "Bug Fixes" and "Backlog")
 
-The rule from PLAN.md applies here too: **neither PLAN.md nor the Monday board is the source of truth alone — they are always kept in sync.**
+The rule from PLAN.md applies here too: **neither PLAN.md nor ClickUp is the source of truth alone — they are always kept in sync.**
 
 ## Plan sync rule (from PLAN.md)
 
-After every task is completed, it MUST be marked done in **both** PLAN.md **and** the Monday.com board. Do not consider a task finished until both reflect it.
+After every task is completed, it MUST be marked done in **both** PLAN.md **and** ClickUp. Do not consider a task finished until both reflect it.
 
 ## Tool / API / MCP documentation rule
 
@@ -34,7 +34,7 @@ Any new external tool, API, MCP server, or third-party service introduced by the
 
 1. **README.md** (in the relevant repo) — what it does, how it is wired up, required env vars
 2. **CLAUDE.md** (in the relevant repo) — one-line entry in the External services section below
-3. **Monday.com board** — add a board item or update the relevant task notes
+3. **ClickUp** — add a task or update the relevant task notes
 
 This rule applies retroactively: if a session ends without documenting a new tool, the next session must document it before doing anything else.
 
@@ -49,6 +49,6 @@ This rule applies retroactively: if a session ends without documenting a new too
 | Replicate | Background removal for garment images | `REPLICATE_API_TOKEN` |
 | Browserless | Headless-Chrome render fallback for web link-paste — fetches the JS-rendered product gallery (flat-lay) on SPA retailers (Zara, H&M) where static HTML only exposes the hero `og:image` | `BROWSERLESS_API_KEY`, optional `BROWSERLESS_URL` |
 | Resend | Transactional email (signup confirmation, etc.) | Configured via Supabase SMTP settings — host `smtp.resend.com`, port `465`, username `resend`, password = Resend API key |
-| OpenStreetMap Nominatim | Free city autocomplete in onboarding backdrop step | No API key — public endpoint `nominatim.openstreetmap.org` |
+| City autocomplete dataset | Static world-cities JSON (`app/data/cities.json`, ~28.7k cities, pop ≥ 15k) with server-side prefix search for onboarding backdrop step. Replaced Nominatim, which ranked by full-address relevance and missed obvious cities (e.g. Berlin) on partial queries | No API key — `npm run data:cities` regenerates from `world-cities-json` devDependency |
 | Playwright | Responsive screenshot testing (dev only) | None — `scripts/shots*.mjs`, run locally |
 | PostHog | Product analytics — activation funnel (install, sidepanel open, wishlist save, try-on generate/save) | `POSTHOG_KEY` in `.env` (extension); `NEXT_PUBLIC_POSTHOG_KEY` in `.env.local` (web app); host `https://us.i.posthog.com` |

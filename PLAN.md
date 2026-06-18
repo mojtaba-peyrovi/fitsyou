@@ -1,9 +1,9 @@
 # fitsyou.live — v1 Build Plan
 
 > One sentence: **see it, try it on yourself, save it, decide.**
-> Board: [fitsyou.live — v1 Build Plan](https://mojtabapeyrovis-team.monday.com/boards/5097397427)
+> Board: [fitsyou.live — v1 Build Plan](https://app.clickup.com/90121823189/v/o/f/901211743712) (ClickUp)
 
-> **Workflow rule:** after **every** task is completed, it MUST be marked done in **both** places — this PLAN.md file **and** the Monday.com board. Neither is the source of truth alone; they are kept in sync. Do not consider a task finished until both reflect it.
+> **Workflow rule:** after **every** task is completed, it MUST be marked done in **both** places — this PLAN.md file **and** the ClickUp board. Neither is the source of truth alone; they are kept in sync. Do not consider a task finished until both reflect it.
 
 ---
 
@@ -111,7 +111,7 @@ File input accepts: jpg, png, webp.
 
 ## Week-by-Week Build Plan
 
-*Synced from [Monday.com board](https://mojtabapeyrovis-team.monday.com/boards/5097397427) on 2026-05-29.*
+*Synced from [Monday.com board](https://mojtabapeyrovis-team.monday.com/boards/5097397427) on 2026-05-29. Project management migrated from Monday.com to [ClickUp](https://app.clickup.com/90121823189/v/o/f/901211743712) on 2026-06-18 — ClickUp is now the live source of truth alongside this file.*
 
 ---
 
