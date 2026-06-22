@@ -138,9 +138,76 @@ async function getToken(): Promise<string | undefined> {
   );
 }
 
+async function getRefreshToken(): Promise<string | undefined> {
+  return new Promise((resolve) =>
+    chrome.storage.local.get(['fitsyou_refresh_token'], (items) =>
+      resolve(items['fitsyou_refresh_token'] as string | undefined)
+    )
+  );
+}
+
+function setTokens(accessToken: string, refreshToken: string): Promise<void> {
+  return new Promise((resolve) =>
+    chrome.storage.local.set(
+      { fitsyou_token: accessToken, fitsyou_refresh_token: refreshToken },
+      resolve
+    )
+  );
+}
+
+function clearTokens(): Promise<void> {
+  return new Promise((resolve) =>
+    chrome.storage.local.remove(['fitsyou_token', 'fitsyou_refresh_token'], resolve)
+  );
+}
+
+// Supabase access tokens are short-lived (~1hr). Without this, every request
+// made after expiry — including the image fetches behind AuthImg — silently
+// 401s and the UI shows blank/placeholder content with no visible error.
+// In-flight refreshes are deduped so concurrent 401s (e.g. a screen full of
+// AuthImg thumbnails expiring at once) only trigger one network call.
+let refreshInFlight: Promise<string | null> | null = null;
+async function refreshAccessToken(): Promise<string | null> {
+  if (refreshInFlight) return refreshInFlight;
+  refreshInFlight = (async () => {
+    const refreshToken = await getRefreshToken();
+    if (!refreshToken) return null;
+    try {
+      const r = await fetch(`${API_BASE}/api/auth/refresh`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refresh_token: refreshToken }),
+      });
+      if (!r.ok) return null;
+      const data = (await r.json()) as { access_token: string; refresh_token: string };
+      await setTokens(data.access_token, data.refresh_token);
+      return data.access_token;
+    } catch { return null; }
+  })();
+  try { return await refreshInFlight; } finally { refreshInFlight = null; }
+}
+
+// Drop-in replacement for `fetch` against API_BASE that refreshes the access
+// token and retries once on a 401, instead of letting the request fail
+// silently. `token` is the caller's best-known token (may already be stale);
+// the latest token from storage is re-read on retry in case another call
+// refreshed it first.
+async function authedFetch(token: string, path: string, init: RequestInit = {}): Promise<Response> {
+  const withAuth = (tk: string): RequestInit => ({
+    ...init,
+    headers: { ...(init.headers ?? {}), Authorization: `Bearer ${tk}` },
+  });
+  const first = await fetch(`${API_BASE}${path}`, withAuth(token));
+  if (first.status !== 401) return first;
+
+  const refreshed = await refreshAccessToken();
+  if (!refreshed) { await clearTokens(); return first; }
+  return fetch(`${API_BASE}${path}`, withAuth(refreshed));
+}
+
 async function apiGet<T>(token: string, path: string): Promise<T[]> {
   try {
-    const r = await fetch(`${API_BASE}${path}`, { headers: { Authorization: `Bearer ${token}` } });
+    const r = await authedFetch(token, path);
     if (!r.ok) return [];
     const j = (await r.json()) as { items?: T[] };
     return j.items ?? [];
@@ -149,9 +216,9 @@ async function apiGet<T>(token: string, path: string): Promise<T[]> {
 
 async function apiPost(token: string, path: string, body: unknown): Promise<{ ok: boolean; data?: unknown; error?: string; code?: string }> {
   try {
-    const r = await fetch(`${API_BASE}${path}`, {
+    const r = await authedFetch(token, path, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     });
     const data = await r.json().catch(() => ({}));
@@ -208,7 +275,7 @@ function AuthImg({ src, token, alt, style }: { src: string | null; token: string
     if (!src) { setResolved(null); return; }
     const key = authKeyFor(src);
     if (!key) { setResolved(src); return; }
-    fetch(`${API_BASE}/api/image?key=${encodeURIComponent(key)}`, { headers: { Authorization: `Bearer ${token}` } })
+    authedFetch(token, `/api/image?key=${encodeURIComponent(key)}`)
       .then((r) => (r.ok ? r.blob() : null))
       .then((blob) => { if (blob) { revoke = URL.createObjectURL(blob); setResolved(revoke); } })
       .catch(() => setResolved(null));
@@ -679,9 +746,9 @@ function Popup() {
     if (!tk) { setStatus('signed-out'); return; }
     setToken(tk);
     try {
-      const r = await fetch(`${API_BASE}/api/user/profile`, { headers: { Authorization: `Bearer ${tk}` } });
+      const r = await authedFetch(tk, '/api/user/profile');
       if (r.status === 401) {
-        chrome.storage.local.remove(['fitsyou_token', 'fitsyou_refresh_token']);
+        await clearTokens();
         setStatus('signed-out'); return;
       }
       const profile: Profile | null = await r.json();
@@ -787,9 +854,9 @@ function Popup() {
     // Fit check (free, no credit)
     let fitResult: FitResult | null = null;
     try {
-      const fr = await fetch(`${API_BASE}/api/fit`, {
+      const fr = await authedFetch(tk, '/api/fit', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${tk}` },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           product_title: ext.productTitle ?? null,
           size_chart_text: ext.sizeChartText,
@@ -844,10 +911,7 @@ function Popup() {
     if (!confirm('Remove this item from your wishlist?')) return;
     const tk = (await getToken()) ?? token;
     if (!tk) return;
-    const res = await fetch(`${API_BASE}/api/wishlist/${id}`, {
-      method: 'DELETE',
-      headers: { Authorization: `Bearer ${tk}` },
-    });
+    const res = await authedFetch(tk, `/api/wishlist/${id}`, { method: 'DELETE' });
     if (res.ok) {
       setWishlist((prev) => prev.filter((w) => w.id !== id));
     } else {
@@ -865,9 +929,7 @@ function Popup() {
     const form = new FormData();
     form.append('file', file);
     try {
-      const up = await fetch(`${API_BASE}/api/upload-product-image`, {
-        method: 'POST', headers: { Authorization: `Bearer ${tk}` }, body: form,
-      });
+      const up = await authedFetch(tk, '/api/upload-product-image', { method: 'POST', body: form });
       if (!up.ok) throw new Error();
       const { url } = (await up.json()) as { url: string };
       const pUrl = currentTabUrl || `manual-upload-${Date.now()}`;
@@ -889,11 +951,7 @@ function Popup() {
     const form = new FormData();
     form.append('image', file);
     try {
-      const r = await fetch(`${API_BASE}/api/wardrobe`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${tk}` },
-        body: form,
-      });
+      const r = await authedFetch(tk, '/api/wardrobe', { method: 'POST', body: form });
       const data = await r.json().catch(() => ({})) as { item?: WardrobeItem; error?: string };
       if (!r.ok) {
         const msg = data.error ?? `Error ${r.status}`;
