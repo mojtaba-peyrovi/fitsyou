@@ -1,8 +1,9 @@
-import { render } from 'preact';
-import { useState, useEffect, useRef } from 'preact/hooks';
-import { initAnalytics, identifyUser, capture } from '../analytics';
-
-initAnalytics();
+import { render, createContext } from 'preact';
+import { useState, useEffect, useRef, useContext } from 'preact/hooks';
+import {
+  initAnalytics, identifyUser, capture,
+  getAnalyticsConsent, setAnalyticsConsent, clearAnalyticsConsent,
+} from '../analytics';
 
 const API_BASE = 'https://fitsyou.live';
 
@@ -684,8 +685,59 @@ function FittingRoom({
   );
 }
 
+// ─── Analytics consent gate ───────────────────────────────────────────────────
+// Mirrors the web app's cookie banner, but stored separately in
+// chrome.storage.local since the extension is a different origin. PostHog is
+// never initialized until the user explicitly accepts here.
+const AnalyticsConsentContext = createContext<{ consent: boolean | null; resetConsent: () => void }>({
+  consent: null,
+  resetConsent: () => {},
+});
+
+function AnalyticsConsentGate({ children }: { children: preact.ComponentChildren }) {
+  const [consent, setConsentState] = useState<boolean | null | 'loading'>('loading');
+
+  useEffect(() => {
+    getAnalyticsConsent().then((v) => {
+      setConsentState(v);
+      if (v === true) initAnalytics();
+    });
+  }, []);
+
+  function decide(value: boolean) {
+    setAnalyticsConsent(value).then(() => {
+      setConsentState(value);
+      if (value) initAnalytics();
+    });
+  }
+
+  function resetConsent() {
+    clearAnalyticsConsent().then(() => setConsentState(null));
+  }
+
+  if (consent === 'loading') return null;
+
+  return (
+    <AnalyticsConsentContext.Provider value={{ consent, resetConsent }}>
+      {consent === null && (
+        <div style={{ background: C.surface, borderBottom: `0.5px solid ${C.border}`, padding: '12px 14px', fontSize: '11px', color: C.ink, lineHeight: 1.5 }}>
+          <div style={{ marginBottom: '8px' }}>
+            fitsyou uses privacy-preserving analytics (PostHog) to understand how the extension is used. No photos or browsing history are included.
+          </div>
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <button onClick={() => decide(true)} style={{ ...btnPink, flex: 1, padding: '8px 10px', fontSize: '10px' }}>Accept analytics</button>
+            <button onClick={() => decide(false)} style={{ ...btnGhost, flex: 1, padding: '8px 10px', fontSize: '10px' }}>Essential only</button>
+          </div>
+        </div>
+      )}
+      {children}
+    </AnalyticsConsentContext.Provider>
+  );
+}
+
 // ─── Main popup ───────────────────────────────────────────────────────────────
 function Popup() {
+  const { resetConsent: resetAnalyticsConsent } = useContext(AnalyticsConsentContext);
   const [status, setStatus]           = useState<PopupState>('checking');
   const [tab, setTab]                 = useState<TabKey>('wishlist');
   const [token, setToken]             = useState('');
@@ -1110,6 +1162,11 @@ function Popup() {
           <div style={{ fontFamily: MONO, fontSize: '10px', color: C.muted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
             {userEmail}
           </div>
+          <button
+            onClick={resetAnalyticsConsent}
+            title="Change analytics preference"
+            style={{ background: 'none', border: 'none', padding: '2px', cursor: 'pointer', color: C.muted, fontSize: '12px', lineHeight: 1, flexShrink: 0 }}
+          >🍪</button>
           <div style={{
             fontFamily: MONO, fontSize: '8px', letterSpacing: '0.08em', textTransform: 'uppercase',
             padding: '2px 8px', borderRadius: '100px', flexShrink: 0,
@@ -1546,4 +1603,9 @@ const btnGhost: preact.JSX.CSSProperties = {
   letterSpacing: '0.10em', textTransform: 'uppercase',
 };
 
-render(<Popup />, document.getElementById('app')!);
+render(
+  <AnalyticsConsentGate>
+    <Popup />
+  </AnalyticsConsentGate>,
+  document.getElementById('app')!
+);

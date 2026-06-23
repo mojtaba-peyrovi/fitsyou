@@ -17,22 +17,11 @@ interface ProductExtractedMessage {
 
 type IncomingMessage = AuthTokenMessage | ProductExtractedMessage;
 
-chrome.runtime.onInstalled.addListener((details) => {
-  if (details.reason !== 'install') return;
-  const key = process.env.POSTHOG_KEY;
-  if (!key) return;
-  fetch('https://us.i.posthog.com/capture/', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      api_key: key,
-      event: 'extension_installed',
-      distinct_id: 'anonymous_install',
-      properties: { source: 'extension' },
-      timestamp: new Date().toISOString(),
-    }),
-  }).catch(() => {});
-});
+// No analytics consent exists yet at install time (the popup hasn't been
+// opened, so the consent banner hasn't been shown) — sending an event here
+// unconditionally would collect data before any consent decision, so this
+// install ping is intentionally not sent. The popup's own
+// 'sidepanel_opened' capture (gated on consent) is the first analytics event.
 
 // Auth token arrives from the web app page (external sender), so it must be
 // handled by onMessageExternal — onMessage only receives internal messages.

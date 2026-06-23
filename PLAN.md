@@ -24,7 +24,7 @@ fitsyou is a lightweight Chrome extension + web profile that lets users see how 
 | Web app | **Next.js on Vercel** (existing app, kept) — Lovable design ported in, not adopted wholesale |
 | Auth + DB | Supabase (Postgres, EU West / Frankfurt) |
 | Image storage | Cloudflare R2 (bucket `fitsyou-outputs`) |
-| Payments | Paddle (EU VAT auto-handled) |
+| Payments | ~~Paddle~~ **rejected by Paddle (2026-06-23) — migrating to Stripe direct.** Paid tiers show "Coming soon" site-wide until Stripe checkout is live. |
 | Inputs | Two only: user photo + product image. No three-input pipeline. |
 | Architecture | Fixed deterministic pipeline: extract → compose → save. No agentic AI, no LLM reasoning loop. |
 | Playwright worker | Deferred post-launch |
@@ -69,7 +69,7 @@ fitsyou is a lightweight Chrome extension + web profile that lets users see how 
 | Frontend / API | Next.js on Vercel |
 | Auth + DB | Supabase (Postgres) |
 | Image storage | Cloudflare R2 |
-| Payments | Paddle |
+| Payments | ~~Paddle~~ Stripe (migration pending — see Locked Decisions) |
 | Try-on API | GPT Image 1.5 (`gpt-image-1.5`), medium quality, 1024×1024 |
 
 ---
@@ -477,6 +477,8 @@ Stops the same item being saved twice. Migration: `supabase/migrations/20260605_
 **Gender-section guard (Done):** Users who have set a shopping section (women's / men's) are blocked from generating try-ons of items confidently tagged as the opposite section. Implemented as a conservative, signal-based guard: the block only fires when **both** the user has stated a binary shopping section **and** the item is clearly tagged opposite (e.g. `/women/` in the URL, "Women's…" in the title). No stated section, unisex items, or ambiguous titles → always allowed. The signal is inferred by `inferGarmentGender(url, title)` in `lib/garments.ts`, which matches on whole-word boundaries to avoid false positives ("men" inside "women"/"garment"). Guard fires in `/api/generate` (extension single try-on) and `/api/outfit` (wishlist items in Fitting Room); wardrobe items are exempt (clothes the user already owns). Users can set / change their shopping section in Profile (Personal details) and during Onboarding (measurements step). DB migration: `supabase/migrations/20260605_add_gender.sql` — adds `gender text` column to `profiles`. Run in Supabase SQL editor.
 
 **Chrome Web Store:** ⚠️ SCHEDULE RISK — submit as early as possible; review can take 3 days to 3 weeks. Optimize listing for: "virtual try-on", "fashion try-on", "see clothes on me".
+
+**Beta submission legal/compliance prep (Done, 2026-06-23):** Completed `webstore_compliance_claude-code-tasks.md` P0–P3 and P5 ahead of the beta (Unlisted) submission — de-Paddled all live-site and ToS copy with paid tiers marked "Coming soon," replaced the privacy policy (controller named, Art. 9 biometric-consent legal basis, international transfers, retention, Berlin DPA, Chrome Limited Use), rewrote refund policy and terms for Anna Arndt/House of Steam as merchant of record, added "trading as House of Steam" to the Impressum, switched PostHog to EU Cloud and added a consent-gated analytics banner to the extension popup (previously ungated), and wrote the manifest single-purpose + per-permission justification doc (`CHROME_STORE_LISTING.md`) for the Dashboard's Privacy tab. Full Stripe migration (P4) is a separate follow-up — task #12 below is now unblocked from a legal standpoint but still needs Stripe checkout (or to ship with paid tiers disabled) before the listing goes live. See `fitsyou-web-app/COMPLIANCE.md` for the detailed review log.
 
 **Analytics (PostHog or equivalent):** track installs, profile completions, first try-on completions, conversion to paid. Key metric: **cost per activated user** (install + profile + ≥1 try-on).
 
