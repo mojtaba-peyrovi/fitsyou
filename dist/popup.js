@@ -126,13 +126,17 @@ var t=/["&<]/;function n(r){if(0===r.length||!1===t.test(r))return r;for(var e=0
 __webpack_require__.r(__webpack_exports__);
 /* harmony export */ __webpack_require__.d(__webpack_exports__, {
 /* harmony export */   capture: () => (/* binding */ capture),
+/* harmony export */   clearAnalyticsConsent: () => (/* binding */ clearAnalyticsConsent),
+/* harmony export */   getAnalyticsConsent: () => (/* binding */ getAnalyticsConsent),
 /* harmony export */   identifyUser: () => (/* binding */ identifyUser),
-/* harmony export */   initAnalytics: () => (/* binding */ initAnalytics)
+/* harmony export */   initAnalytics: () => (/* binding */ initAnalytics),
+/* harmony export */   setAnalyticsConsent: () => (/* binding */ setAnalyticsConsent)
 /* harmony export */ });
 /* harmony import */ var posthog_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! posthog-js */ "./node_modules/posthog-js/dist/module.js");
 
 const KEY = "phc_q5dPoZ6APdg8DjHjGNTw3ZxgasLDEBkxTwHRxmwLZstz" ?? 0;
-const HOST = 'https://us.i.posthog.com';
+const HOST = 'https://eu.i.posthog.com';
+const CONSENT_KEY = 'fitsyou_analytics_consent';
 let initialized = false;
 function initAnalytics() {
     if (!KEY || initialized || typeof window === 'undefined')
@@ -143,6 +147,32 @@ function initAnalytics() {
         persistence: 'localStorage',
     });
     initialized = true;
+}
+// Consent is stored per-install in chrome.storage.local (separate from the
+// web app's localStorage decision, since the extension and fitsyou.live are
+// different origins). null = not yet decided, so initAnalytics() must not
+// be called until the user explicitly accepts.
+function getAnalyticsConsent() {
+    return new Promise((resolve) => {
+        chrome.storage.local.get([CONSENT_KEY], (items) => {
+            const v = items[CONSENT_KEY];
+            resolve(v === true || v === false ? v : null);
+        });
+    });
+}
+function setAnalyticsConsent(value) {
+    return new Promise((resolve) => {
+        chrome.storage.local.set({ [CONSENT_KEY]: value }, () => resolve());
+    });
+}
+function clearAnalyticsConsent() {
+    return new Promise((resolve) => {
+        chrome.storage.local.remove([CONSENT_KEY], () => {
+            if (initialized)
+                posthog_js__WEBPACK_IMPORTED_MODULE_0__["default"].opt_out_capturing();
+            resolve();
+        });
+    });
 }
 function identifyUser(email) {
     if (!initialized)
@@ -235,7 +265,6 @@ __webpack_require__.r(__webpack_exports__);
 
 
 
-(0,_analytics__WEBPACK_IMPORTED_MODULE_3__.initAnalytics)();
 const API_BASE = 'https://fitsyou.live';
 // ─── Brand tokens — v3 "Soft Cool Stone" ─────────────────────────────────────
 const C = {
@@ -307,9 +336,74 @@ function authKeyFor(src) {
 async function getToken() {
     return new Promise((resolve) => chrome.storage.local.get(['fitsyou_token'], (items) => resolve(items['fitsyou_token'])));
 }
+async function getRefreshToken() {
+    return new Promise((resolve) => chrome.storage.local.get(['fitsyou_refresh_token'], (items) => resolve(items['fitsyou_refresh_token'])));
+}
+function setTokens(accessToken, refreshToken) {
+    return new Promise((resolve) => chrome.storage.local.set({ fitsyou_token: accessToken, fitsyou_refresh_token: refreshToken }, resolve));
+}
+function clearTokens() {
+    return new Promise((resolve) => chrome.storage.local.remove(['fitsyou_token', 'fitsyou_refresh_token'], resolve));
+}
+// Supabase access tokens are short-lived (~1hr). Without this, every request
+// made after expiry — including the image fetches behind AuthImg — silently
+// 401s and the UI shows blank/placeholder content with no visible error.
+// In-flight refreshes are deduped so concurrent 401s (e.g. a screen full of
+// AuthImg thumbnails expiring at once) only trigger one network call.
+let refreshInFlight = null;
+async function refreshAccessToken() {
+    if (refreshInFlight)
+        return refreshInFlight;
+    refreshInFlight = (async () => {
+        const refreshToken = await getRefreshToken();
+        if (!refreshToken)
+            return null;
+        try {
+            const r = await fetch(`${API_BASE}/api/auth/refresh`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ refresh_token: refreshToken }),
+            });
+            if (!r.ok)
+                return null;
+            const data = (await r.json());
+            await setTokens(data.access_token, data.refresh_token);
+            return data.access_token;
+        }
+        catch {
+            return null;
+        }
+    })();
+    try {
+        return await refreshInFlight;
+    }
+    finally {
+        refreshInFlight = null;
+    }
+}
+// Drop-in replacement for `fetch` against API_BASE that refreshes the access
+// token and retries once on a 401, instead of letting the request fail
+// silently. `token` is the caller's best-known token (may already be stale);
+// the latest token from storage is re-read on retry in case another call
+// refreshed it first.
+async function authedFetch(token, path, init = {}) {
+    const withAuth = (tk) => ({
+        ...init,
+        headers: { ...(init.headers ?? {}), Authorization: `Bearer ${tk}` },
+    });
+    const first = await fetch(`${API_BASE}${path}`, withAuth(token));
+    if (first.status !== 401)
+        return first;
+    const refreshed = await refreshAccessToken();
+    if (!refreshed) {
+        await clearTokens();
+        return first;
+    }
+    return fetch(`${API_BASE}${path}`, withAuth(refreshed));
+}
 async function apiGet(token, path) {
     try {
-        const r = await fetch(`${API_BASE}${path}`, { headers: { Authorization: `Bearer ${token}` } });
+        const r = await authedFetch(token, path);
         if (!r.ok)
             return [];
         const j = (await r.json());
@@ -321,9 +415,9 @@ async function apiGet(token, path) {
 }
 async function apiPost(token, path, body) {
     try {
-        const r = await fetch(`${API_BASE}${path}`, {
+        const r = await authedFetch(token, path, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(body),
         });
         const data = await r.json().catch(() => ({}));
@@ -373,7 +467,7 @@ function AuthImg({ src, token, alt, style }) {
             setResolved(src);
             return;
         }
-        fetch(`${API_BASE}/api/image?key=${encodeURIComponent(key)}`, { headers: { Authorization: `Bearer ${token}` } })
+        authedFetch(token, `/api/image?key=${encodeURIComponent(key)}`)
             .then((r) => (r.ok ? r.blob() : null))
             .then((blob) => { if (blob) {
             revoke = URL.createObjectURL(blob);
@@ -415,6 +509,9 @@ function FittingRoom({ wishlist, wardrobe, token, onOpenDashboard, onTryOnSaved,
     const [error, setError] = (0,preact_hooks__WEBPACK_IMPORTED_MODULE_2__.useState)('');
     const generatingRef = (0,preact_hooks__WEBPACK_IMPORTED_MODULE_2__.useRef)(false);
     const [canvasReady, setCanvasReady] = (0,preact_hooks__WEBPACK_IMPORTED_MODULE_2__.useState)(false);
+    const [photoConsentShown, setPhotoConsentShown] = (0,preact_hooks__WEBPACK_IMPORTED_MODULE_2__.useState)(false);
+    const [photoConsentPhotoAgreed, setPhotoConsentPhotoAgreed] = (0,preact_hooks__WEBPACK_IMPORTED_MODULE_2__.useState)(false);
+    const [photoConsentAgeAgreed, setPhotoConsentAgeAgreed] = (0,preact_hooks__WEBPACK_IMPORTED_MODULE_2__.useState)(false);
     // Restore canvas state from storage on mount (survives popup close/reopen)
     (0,preact_hooks__WEBPACK_IMPORTED_MODULE_2__.useEffect)(() => {
         chrome.storage.local.get('fitsyou_canvas', (data) => {
@@ -428,6 +525,11 @@ function FittingRoom({ wishlist, wardrobe, token, onOpenDashboard, onTryOnSaved,
                 setSelected(s.selected);
             }
             setCanvasReady(true);
+        });
+        // Check if photo consent has already been given
+        getPhotoConsent().then((consented) => {
+            if (!consented)
+                setPhotoConsentShown(true);
         });
     }, []);
     // Persist canvas state whenever selected items or results change
@@ -460,9 +562,26 @@ function FittingRoom({ wishlist, wardrobe, token, onOpenDashboard, onTryOnSaved,
             ? prev.filter((s) => !(s.source === ref.source && s.id === ref.id))
             : [...prev, ref]);
     }
+    async function handlePhotoConsentAccept() {
+        if (!photoConsentPhotoAgreed || !photoConsentAgeAgreed)
+            return;
+        setPhotoConsentShown(false);
+        await setPhotoConsent(true);
+        // Log consent to backend
+        const tk = (await getToken()) ?? token;
+        await apiPost(tk, '/api/user/photo-consent', {
+            source: 'extension',
+            timestamp: new Date().toISOString(),
+        }).catch(() => { }); // non-blocking
+    }
     async function generate() {
         if (selected.length === 0)
             return;
+        const consented = await getPhotoConsent();
+        if (!consented) {
+            setPhotoConsentShown(true);
+            return;
+        }
         setPhase('generating');
         setProgress(0);
         setError('');
@@ -555,7 +674,16 @@ function FittingRoom({ wishlist, wardrobe, token, onOpenDashboard, onTryOnSaved,
                         fontSize: '10px', fontWeight: 700,
                     }, children: "\u2713" })), (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("div", { style: { padding: '5px 6px 6px' }, children: [sub && (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)(StoreTag, { name: sub }), (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("div", { style: { fontSize: '10px', fontWeight: 600, color: C.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: '1px' }, children: label ?? 'Item' })] })] }, item.id));
     }
-    return ((0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("div", { style: { display: 'flex', flexDirection: 'column', gap: '12px' }, children: [(0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("div", { style: { display: 'flex', flexDirection: 'column', gap: '10px' }, children: [(0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("div", { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between' }, children: [(0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("div", { style: { fontSize: '12px', fontWeight: 600, color: C.ink, fontFamily: MONO, letterSpacing: '0.06em', textTransform: 'uppercase' }, children: "Mirror" }), (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("div", { style: { display: 'flex', alignItems: 'center', gap: '8px' }, children: [(selected.length > 0 || results.length > 0) && ((0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("button", { onClick: clearCanvas, style: { background: 'none', border: 'none', padding: '0', cursor: 'pointer', fontFamily: MONO, fontSize: '10px', color: C.muted, textDecoration: 'underline' }, children: "Clear" })), (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("div", { style: { fontFamily: MONO, fontSize: '10px', color: C.muted }, children: [selected.length, " item", selected.length === 1 ? '' : 's'] })] })] }), (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("div", { style: {
+    return ((0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("div", { style: { display: 'flex', flexDirection: 'column', gap: '12px' }, children: [photoConsentShown && ((0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("div", { style: {
+                    position: 'fixed', inset: 0, zIndex: 1000,
+                    background: 'rgba(22,22,22,0.92)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                }, children: (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("div", { style: { width: '320px', background: C.surface, padding: '20px', boxSizing: 'border-box', borderRadius: '0' }, children: [(0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("div", { style: { fontSize: '13px', fontWeight: 700, color: C.ink, marginBottom: '12px' }, children: "How we use your photo" }), (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("div", { style: { fontSize: '12px', color: C.ink, opacity: 0.85, marginBottom: '14px', lineHeight: 1.6 }, children: ["Your full-body photo is sent to ", (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("strong", { children: "OpenAI" }), " (US-based) to generate try-on images. Your photo is ", (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("strong", { children: "never" }), " used to train AI models \u2014 we have a contractual guarantee with OpenAI."] }), (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("div", { style: { fontSize: '11px', color: C.muted, marginBottom: '14px', lineHeight: 1.5 }, children: "After setup, you can choose to anonymize your face in try-ons from your profile settings." }), (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("label", { style: { display: 'flex', alignItems: 'flex-start', gap: '8px', marginBottom: '10px', cursor: 'pointer' }, children: [(0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("input", { type: "checkbox", checked: photoConsentPhotoAgreed, onChange: (e) => setPhotoConsentPhotoAgreed(e.target.checked), style: { marginTop: '2px', flexShrink: 0 } }), (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("span", { style: { fontSize: '11px', color: C.ink, lineHeight: 1.5 }, children: ["I consent to fitsyou sending my photo to OpenAI for try-on generation. See", ' ', (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("a", { href: "https://fitsyou.live/privacy", target: "_blank", rel: "noopener noreferrer", style: { color: C.pinkDark, textDecoration: 'underline' }, children: "Privacy Policy" })] })] }), (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("label", { style: { display: 'flex', alignItems: 'flex-start', gap: '8px', marginBottom: '14px', cursor: 'pointer' }, children: [(0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("input", { type: "checkbox", checked: photoConsentAgeAgreed, onChange: (e) => setPhotoConsentAgeAgreed(e.target.checked), style: { marginTop: '2px', flexShrink: 0 } }), (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("span", { style: { fontSize: '11px', color: C.ink, lineHeight: 1.5 }, children: ["I confirm I am ", (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("strong", { children: "18 years of age or older" })] })] }), (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("button", { onClick: handlePhotoConsentAccept, disabled: !photoConsentPhotoAgreed || !photoConsentAgeAgreed, style: {
+                                ...btnPink,
+                                opacity: (!photoConsentPhotoAgreed || !photoConsentAgeAgreed) ? 0.5 : 1,
+                                cursor: (!photoConsentPhotoAgreed || !photoConsentAgeAgreed) ? 'not-allowed' : 'pointer',
+                                padding: '10px 14px', fontSize: '11px', marginBottom: '8px',
+                            }, children: "Accept & continue" }), (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("button", { onClick: () => setPhotoConsentShown(false), style: { ...btnGhost, padding: '10px 14px', fontSize: '11px', color: C.ink, borderColor: C.border }, children: "Cancel" })] }) })), (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("div", { style: { display: 'flex', flexDirection: 'column', gap: '10px' }, children: [(0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("div", { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between' }, children: [(0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("div", { style: { fontSize: '12px', fontWeight: 600, color: C.ink, fontFamily: MONO, letterSpacing: '0.06em', textTransform: 'uppercase' }, children: "Mirror" }), (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("div", { style: { display: 'flex', alignItems: 'center', gap: '8px' }, children: [(selected.length > 0 || results.length > 0) && ((0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("button", { onClick: clearCanvas, style: { background: 'none', border: 'none', padding: '0', cursor: 'pointer', fontFamily: MONO, fontSize: '10px', color: C.muted, textDecoration: 'underline' }, children: "Clear" })), (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("div", { style: { fontFamily: MONO, fontSize: '10px', color: C.muted }, children: [selected.length, " item", selected.length === 1 ? '' : 's'] })] })] }), (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("div", { style: {
                             position: 'relative', width: '100%', paddingBottom: '100%', overflow: 'hidden',
                             background: 'linear-gradient(155deg, #EEF1EE 0%, #D8DEDB 52%, #9FA8A3 100%)',
                             boxShadow: 'inset 0 0 48px rgba(22,22,22,0.06)',
@@ -586,8 +714,47 @@ function FittingRoom({ wishlist, wardrobe, token, onOpenDashboard, onTryOnSaved,
                     opacity: saved ? 0.7 : 1,
                 }, children: saved ? '✓ Saved to Try-ons' : '♡ Save to Try-ons' })), (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("div", { children: [(0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("div", { style: { fontFamily: MONO, fontSize: '9px', letterSpacing: '0.1em', textTransform: 'uppercase', color: C.muted, marginBottom: '8px' }, children: "From your wishlist" }), wishlist.length === 0 ? ((0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("div", { style: { fontSize: '12px', color: C.muted }, children: "No wishlist items yet." })) : ((0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("div", { style: { display: 'flex', gap: '8px', overflowX: 'auto', paddingBottom: '4px' }, children: wishlist.map((item) => (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)(ItemCard, { item: item, source: "wishlist" }, item.id)) }))] }), (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("div", { children: [(0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("div", { style: { fontFamily: MONO, fontSize: '9px', letterSpacing: '0.1em', textTransform: 'uppercase', color: C.muted, marginBottom: '8px' }, children: "From your wardrobe" }), wardrobe.length === 0 ? ((0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("div", { style: { fontSize: '12px', color: C.muted }, children: "No wardrobe items yet." })) : ((0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("div", { style: { display: 'flex', gap: '8px', overflowX: 'auto', paddingBottom: '4px' }, children: wardrobe.map((item) => (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)(ItemCard, { item: item, source: "wardrobe" }, item.id)) }))] }), (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("button", { onClick: onOpenDashboard, style: { ...btnGhost, marginTop: '4px' }, children: "Open full Fitting Room \u2192" })] }));
 }
+// ─── Photo consent helper ─────────────────────────────────────────────────────
+async function getPhotoConsent() {
+    return new Promise((resolve) => chrome.storage.local.get(['fitsyou_photo_consent'], (items) => resolve(items['fitsyou_photo_consent'] ?? false)));
+}
+async function setPhotoConsent(value) {
+    return new Promise((resolve) => chrome.storage.local.set({ fitsyou_photo_consent: value }, resolve));
+}
+// ─── Analytics consent gate ───────────────────────────────────────────────────
+// Mirrors the web app's cookie banner, but stored separately in
+// chrome.storage.local since the extension is a different origin. PostHog is
+// never initialized until the user explicitly accepts here.
+const AnalyticsConsentContext = (0,preact__WEBPACK_IMPORTED_MODULE_1__.createContext)({
+    consent: null,
+    resetConsent: () => { },
+});
+function AnalyticsConsentGate({ children }) {
+    const [consent, setConsentState] = (0,preact_hooks__WEBPACK_IMPORTED_MODULE_2__.useState)('loading');
+    (0,preact_hooks__WEBPACK_IMPORTED_MODULE_2__.useEffect)(() => {
+        (0,_analytics__WEBPACK_IMPORTED_MODULE_3__.getAnalyticsConsent)().then((v) => {
+            setConsentState(v);
+            if (v === true)
+                (0,_analytics__WEBPACK_IMPORTED_MODULE_3__.initAnalytics)();
+        });
+    }, []);
+    function decide(value) {
+        (0,_analytics__WEBPACK_IMPORTED_MODULE_3__.setAnalyticsConsent)(value).then(() => {
+            setConsentState(value);
+            if (value)
+                (0,_analytics__WEBPACK_IMPORTED_MODULE_3__.initAnalytics)();
+        });
+    }
+    function resetConsent() {
+        (0,_analytics__WEBPACK_IMPORTED_MODULE_3__.clearAnalyticsConsent)().then(() => setConsentState(null));
+    }
+    if (consent === 'loading')
+        return null;
+    return ((0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)(AnalyticsConsentContext.Provider, { value: { consent, resetConsent }, children: [consent === null && ((0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("div", { style: { background: C.surface, borderBottom: `0.5px solid ${C.border}`, padding: '12px 14px', fontSize: '11px', color: C.ink, lineHeight: 1.5 }, children: [(0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("div", { style: { marginBottom: '8px' }, children: "fitsyou uses privacy-preserving analytics (PostHog) to understand how the extension is used. No photos or browsing history are included." }), (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("div", { style: { display: 'flex', gap: '8px' }, children: [(0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("button", { onClick: () => decide(true), style: { ...btnPink, flex: 1, padding: '8px 10px', fontSize: '10px' }, children: "Accept analytics" }), (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("button", { onClick: () => decide(false), style: { ...btnGhost, flex: 1, padding: '8px 10px', fontSize: '10px' }, children: "Essential only" })] })] })), children] }));
+}
 // ─── Main popup ───────────────────────────────────────────────────────────────
 function Popup() {
+    const { resetConsent: resetAnalyticsConsent } = (0,preact_hooks__WEBPACK_IMPORTED_MODULE_2__.useContext)(AnalyticsConsentContext);
     const [status, setStatus] = (0,preact_hooks__WEBPACK_IMPORTED_MODULE_2__.useState)('checking');
     const [tab, setTab] = (0,preact_hooks__WEBPACK_IMPORTED_MODULE_2__.useState)('wishlist');
     const [token, setToken] = (0,preact_hooks__WEBPACK_IMPORTED_MODULE_2__.useState)('');
@@ -643,9 +810,9 @@ function Popup() {
         }
         setToken(tk);
         try {
-            const r = await fetch(`${API_BASE}/api/user/profile`, { headers: { Authorization: `Bearer ${tk}` } });
+            const r = await authedFetch(tk, '/api/user/profile');
             if (r.status === 401) {
-                chrome.storage.local.remove(['fitsyou_token', 'fitsyou_refresh_token']);
+                await clearTokens();
                 setStatus('signed-out');
                 return;
             }
@@ -761,9 +928,9 @@ function Popup() {
         // Fit check (free, no credit)
         let fitResult = null;
         try {
-            const fr = await fetch(`${API_BASE}/api/fit`, {
+            const fr = await authedFetch(tk, '/api/fit', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${tk}` },
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     product_title: ext.productTitle ?? null,
                     size_chart_text: ext.sizeChartText,
@@ -816,10 +983,7 @@ function Popup() {
         const tk = (await getToken()) ?? token;
         if (!tk)
             return;
-        const res = await fetch(`${API_BASE}/api/wishlist/${id}`, {
-            method: 'DELETE',
-            headers: { Authorization: `Bearer ${tk}` },
-        });
+        const res = await authedFetch(tk, `/api/wishlist/${id}`, { method: 'DELETE' });
         if (res.ok) {
             setWishlist((prev) => prev.filter((w) => w.id !== id));
         }
@@ -840,9 +1004,7 @@ function Popup() {
         const form = new FormData();
         form.append('file', file);
         try {
-            const up = await fetch(`${API_BASE}/api/upload-product-image`, {
-                method: 'POST', headers: { Authorization: `Bearer ${tk}` }, body: form,
-            });
+            const up = await authedFetch(tk, '/api/upload-product-image', { method: 'POST', body: form });
             if (!up.ok)
                 throw new Error();
             const { url } = (await up.json());
@@ -873,11 +1035,7 @@ function Popup() {
         const form = new FormData();
         form.append('image', file);
         try {
-            const r = await fetch(`${API_BASE}/api/wardrobe`, {
-                method: 'POST',
-                headers: { Authorization: `Bearer ${tk}` },
-                body: form,
-            });
+            const r = await authedFetch(tk, '/api/wardrobe', { method: 'POST', body: form });
             const data = await r.json().catch(() => ({}));
             if (!r.ok) {
                 const msg = data.error ?? `Error ${r.status}`;
@@ -975,7 +1133,7 @@ function Popup() {
                                 const { ext, tabUrl, tk, fitResult } = fitConfirm;
                                 setFitConfirm(null);
                                 saveWishlistItem(ext, tabUrl, tk, fitResult);
-                            }, children: "Add anyway" }), (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("button", { style: { ...btnGhost, marginTop: '8px' }, onClick: () => setFitConfirm(null), children: "Cancel" })] }) })), (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("div", { style: { background: C.ink, padding: '12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }, children: [(0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("div", { style: { fontSize: '22px', lineHeight: 1, display: 'flex', alignItems: 'baseline' }, children: [(0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("span", { style: { fontFamily: SANS, fontWeight: 800, color: '#fff', letterSpacing: '-0.01em' }, children: "fits" }), (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("em", { style: { fontFamily: SERIF, fontStyle: 'italic', fontWeight: 600, color: C.pink, fontSize: '1.05em' }, children: "you" })] }), (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("button", { onClick: () => window.close(), title: "Close", style: { background: 'none', border: 'none', padding: '4px 6px', cursor: 'pointer', color: C.muted, fontSize: '18px', lineHeight: 1 }, children: "\u00D7" })] }), status === 'idle' && ((0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("div", { style: { background: C.ink, borderTop: `0.5px solid rgba(255,255,255,0.08)`, padding: '8px 16px', display: 'flex', alignItems: 'center', gap: '8px' }, children: [(userFaceUrl ?? userPhotoUrl) ? ((0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)(AuthImg, { src: userFaceUrl ?? userPhotoUrl, token: token, alt: "You", style: { width: '22px', height: '22px', borderRadius: '50%', objectFit: 'cover', flexShrink: 0 } })) : ((0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("div", { style: { width: '22px', height: '22px', borderRadius: '50%', background: 'rgba(255,255,255,0.1)', flexShrink: 0 } })), (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("div", { style: { fontFamily: MONO, fontSize: '10px', color: C.muted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }, children: userEmail }), (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("div", { style: {
+                            }, children: "Add anyway" }), (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("button", { style: { ...btnGhost, marginTop: '8px' }, onClick: () => setFitConfirm(null), children: "Cancel" })] }) })), (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("div", { style: { background: C.ink, padding: '12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }, children: [(0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("div", { style: { fontSize: '22px', lineHeight: 1, display: 'flex', alignItems: 'baseline' }, children: [(0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("span", { style: { fontFamily: SANS, fontWeight: 800, color: '#fff', letterSpacing: '-0.01em' }, children: "fits" }), (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("em", { style: { fontFamily: SERIF, fontStyle: 'italic', fontWeight: 600, color: C.pink, fontSize: '1.05em' }, children: "you" })] }), (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("button", { onClick: () => window.close(), title: "Close", style: { background: 'none', border: 'none', padding: '4px 6px', cursor: 'pointer', color: C.muted, fontSize: '18px', lineHeight: 1 }, children: "\u00D7" })] }), status === 'idle' && ((0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)("div", { style: { background: C.ink, borderTop: `0.5px solid rgba(255,255,255,0.08)`, padding: '8px 16px', display: 'flex', alignItems: 'center', gap: '8px' }, children: [(userFaceUrl ?? userPhotoUrl) ? ((0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)(AuthImg, { src: userFaceUrl ?? userPhotoUrl, token: token, alt: "You", style: { width: '22px', height: '22px', borderRadius: '50%', objectFit: 'cover', flexShrink: 0 } })) : ((0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("div", { style: { width: '22px', height: '22px', borderRadius: '50%', background: 'rgba(255,255,255,0.1)', flexShrink: 0 } })), (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("div", { style: { fontFamily: MONO, fontSize: '10px', color: C.muted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }, children: userEmail }), (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("button", { onClick: resetAnalyticsConsent, title: "Change analytics preference", style: { background: 'none', border: 'none', padding: '2px', cursor: 'pointer', color: C.muted, fontSize: '12px', lineHeight: 1, flexShrink: 0 }, children: "\uD83C\uDF6A" }), (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("div", { style: {
                             fontFamily: MONO, fontSize: '8px', letterSpacing: '0.08em', textTransform: 'uppercase',
                             padding: '2px 8px', borderRadius: '100px', flexShrink: 0,
                             background: subscriptionTier === 'free' ? 'rgba(255,255,255,0.08)' : C.pink,
@@ -1058,7 +1216,7 @@ const btnGhost = {
     fontSize: '11px', fontWeight: 600, cursor: 'pointer', fontFamily: SANS,
     letterSpacing: '0.10em', textTransform: 'uppercase',
 };
-(0,preact__WEBPACK_IMPORTED_MODULE_1__.render)((0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)(Popup, {}), document.getElementById('app'));
+(0,preact__WEBPACK_IMPORTED_MODULE_1__.render)((0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)(AnalyticsConsentGate, { children: (0,preact_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)(Popup, {}) }), document.getElementById('app'));
 
 })();
 

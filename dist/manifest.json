@@ -1,10 +1,23 @@
 {
   "manifest_version": 3,
   "name": "fitsyou",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "See how clothing looks on you before you buy.",
-  "permissions": ["activeTab", "storage", "scripting", "sidePanel"],
-  "host_permissions": ["https://*/*", "http://*/*"],
+  "permissions": [
+    "activeTab",
+    "storage",
+    "scripting",
+    "sidePanel"
+  ],
+  "host_permissions": [
+    "*://*.zara.com/*",
+    "*://*.asos.com/*",
+    "*://*.hm.com/*",
+    "*://*.zalando.com/*",
+    "*://*.zalando.de/*",
+    "*://*.zalando.co.uk/*",
+    "*://*.mango.com/*"
+  ],
   "icons": {
     "16": "icons/icon-16.png",
     "32": "icons/icon-32.png",
@@ -25,14 +38,34 @@
   },
   "web_accessible_resources": [
     {
-      "resources": ["icons/*.png"],
-      "matches": ["<all_urls>"]
+      "resources": [
+        "icons/*.png"
+      ],
+      "matches": [
+        "*://*.zara.com/*",
+        "*://*.asos.com/*",
+        "*://*.hm.com/*",
+        "*://*.zalando.com/*",
+        "*://*.zalando.de/*",
+        "*://*.zalando.co.uk/*",
+        "*://*.mango.com/*"
+      ]
     }
   ],
   "content_scripts": [
     {
-      "matches": ["https://*/*", "http://*/*"],
-      "js": ["badge.js"],
+      "matches": [
+        "*://*.zara.com/*",
+        "*://*.asos.com/*",
+        "*://*.hm.com/*",
+        "*://*.zalando.com/*",
+        "*://*.zalando.de/*",
+        "*://*.zalando.co.uk/*",
+        "*://*.mango.com/*"
+      ],
+      "js": [
+        "badge.js"
+      ],
       "run_at": "document_idle"
     },
     {
@@ -45,7 +78,9 @@
         "*://*.zalando.co.uk/*",
         "*://*.mango.com/*"
       ],
-      "js": ["content.js"]
+      "js": [
+        "content.js"
+      ]
     }
   ],
   "background": {

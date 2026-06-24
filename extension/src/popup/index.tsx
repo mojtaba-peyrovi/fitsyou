@@ -340,6 +340,9 @@ function FittingRoom({
   const [error, setError]       = useState('');
   const generatingRef  = useRef(false);
   const [canvasReady, setCanvasReady] = useState(false);
+  const [photoConsentShown, setPhotoConsentShown] = useState(false);
+  const [photoConsentPhotoAgreed, setPhotoConsentPhotoAgreed] = useState(false);
+  const [photoConsentAgeAgreed, setPhotoConsentAgeAgreed] = useState(false);
 
   // Restore canvas state from storage on mount (survives popup close/reopen)
   useEffect(() => {
@@ -353,6 +356,10 @@ function FittingRoom({
         setSelected(s.selected);
       }
       setCanvasReady(true);
+    });
+    // Check if photo consent has already been given
+    getPhotoConsent().then((consented) => {
+      if (!consented) setPhotoConsentShown(true);
     });
   }, []);
 
@@ -384,8 +391,25 @@ function FittingRoom({
     );
   }
 
+  async function handlePhotoConsentAccept() {
+    if (!photoConsentPhotoAgreed || !photoConsentAgeAgreed) return;
+    setPhotoConsentShown(false);
+    await setPhotoConsent(true);
+    // Log consent to backend
+    const tk = (await getToken()) ?? token;
+    await apiPost(tk, '/api/user/photo-consent', {
+      source: 'extension',
+      timestamp: new Date().toISOString(),
+    }).catch(() => {}); // non-blocking
+  }
+
   async function generate() {
     if (selected.length === 0) return;
+    const consented = await getPhotoConsent();
+    if (!consented) {
+      setPhotoConsentShown(true);
+      return;
+    }
     setPhase('generating');
     setProgress(0); setError(''); setResults([]); setSaved(false);
     generatingRef.current = true;
@@ -494,6 +518,77 @@ function FittingRoom({
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+
+      {/* Photo consent modal */}
+      {photoConsentShown && (
+        <div
+          style={{
+            position: 'fixed', inset: 0, zIndex: 1000,
+            background: 'rgba(22,22,22,0.92)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}
+        >
+          <div style={{ width: '320px', background: C.surface, padding: '20px', boxSizing: 'border-box', borderRadius: '0' }}>
+            <div style={{ fontSize: '13px', fontWeight: 700, color: C.ink, marginBottom: '12px' }}>
+              How we use your photo
+            </div>
+            <div style={{ fontSize: '12px', color: C.ink, opacity: 0.85, marginBottom: '14px', lineHeight: 1.6 }}>
+              Your full-body photo is sent to <strong>OpenAI</strong> (US-based) to generate try-on images. Your photo is <strong>never</strong> used to train AI models — we have a contractual guarantee with OpenAI.
+            </div>
+            <div style={{ fontSize: '11px', color: C.muted, marginBottom: '14px', lineHeight: 1.5 }}>
+              After setup, you can choose to anonymize your face in try-ons from your profile settings.
+            </div>
+            <label style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', marginBottom: '10px', cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={photoConsentPhotoAgreed}
+                onChange={(e) => setPhotoConsentPhotoAgreed((e.target as HTMLInputElement).checked)}
+                style={{ marginTop: '2px', flexShrink: 0 }}
+              />
+              <span style={{ fontSize: '11px', color: C.ink, lineHeight: 1.5 }}>
+                I consent to fitsyou sending my photo to OpenAI for try-on generation. See{' '}
+                <a
+                  href="https://fitsyou.live/privacy"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{ color: C.pinkDark, textDecoration: 'underline' }}
+                >
+                  Privacy Policy
+                </a>
+              </span>
+            </label>
+            <label style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', marginBottom: '14px', cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={photoConsentAgeAgreed}
+                onChange={(e) => setPhotoConsentAgeAgreed((e.target as HTMLInputElement).checked)}
+                style={{ marginTop: '2px', flexShrink: 0 }}
+              />
+              <span style={{ fontSize: '11px', color: C.ink, lineHeight: 1.5 }}>
+                I confirm I am <strong>18 years of age or older</strong>
+              </span>
+            </label>
+            <button
+              onClick={handlePhotoConsentAccept}
+              disabled={!photoConsentPhotoAgreed || !photoConsentAgeAgreed}
+              style={{
+                ...btnPink,
+                opacity: (!photoConsentPhotoAgreed || !photoConsentAgeAgreed) ? 0.5 : 1,
+                cursor: (!photoConsentPhotoAgreed || !photoConsentAgeAgreed) ? 'not-allowed' : 'pointer',
+                padding: '10px 14px', fontSize: '11px', marginBottom: '8px',
+              }}
+            >
+              Accept & continue
+            </button>
+            <button
+              onClick={() => setPhotoConsentShown(false)}
+              style={{ ...btnGhost, padding: '10px 14px', fontSize: '11px', color: C.ink, borderColor: C.border }}
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Mirror */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
@@ -682,6 +777,21 @@ function FittingRoom({
       </button>
 
     </div>
+  );
+}
+
+// ─── Photo consent helper ─────────────────────────────────────────────────────
+async function getPhotoConsent(): Promise<boolean> {
+  return new Promise((resolve) =>
+    chrome.storage.local.get(['fitsyou_photo_consent'], (items) =>
+      resolve((items['fitsyou_photo_consent'] as boolean) ?? false)
+    )
+  );
+}
+
+async function setPhotoConsent(value: boolean): Promise<void> {
+  return new Promise((resolve) =>
+    chrome.storage.local.set({ fitsyou_photo_consent: value }, resolve)
   );
 }
 
