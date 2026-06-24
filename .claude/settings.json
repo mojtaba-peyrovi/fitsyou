@@ -85,7 +85,9 @@
       "mcp__claude_ai_monday_com__create_column",
       "Bash(Get-ChildItem -Path \"c:\\\\Users\\\\mojta\\\\personal_projects\\\\fitsyou-web-app\\\\app\" -Recurse -Directory)",
       "Bash(Select-Object -ExpandProperty Name)",
-      "Bash(Sort-Object)"
+      "Bash(Sort-Object)",
+      "mcp__claude_ai_ClickUp__clickup_update_task",
+      "mcp__claude_ai_ClickUp__clickup_get_task"
     ],
     "additionalDirectories": [
       "c:\\Users\\mojta\\personal_projects\\fitsyou-web-app\\app\\api\\user\\photo",

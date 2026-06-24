@@ -1,4 +1,5 @@
 import { render, createContext } from 'preact';
+import type { JSX } from 'preact';
 import { useState, useEffect, useRef, useContext } from 'preact/hooks';
 import {
   initAnalytics, identifyUser, capture,
@@ -34,6 +35,31 @@ const MONO  = "'Archivo', system-ui, sans-serif";
 // ─── Types ────────────────────────────────────────────────────────────────────
 type PopupState = 'checking' | 'signed-out' | 'needs-setup' | 'idle' | 'manual';
 type TabKey = 'tryons' | 'wishlist' | 'wardrobe' | 'fitting-room';
+
+// Icons match the web app navbar (fitsyou-web-app/app/components/Navbar.tsx DASH_TABS).
+const TAB_ICONS: Record<TabKey, JSX.Element> = {
+  'fitting-room': (
+    <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+      <rect x="6" y="2" width="12" height="16" rx="6" />
+      <path d="M9 20h6M12 18v4" />
+    </svg>
+  ),
+  tryons: (
+    <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+      <path d="M20.38 3.46 16 2a4 4 0 0 1-8 0L3.62 3.46a2 2 0 0 0-1.34 2.23l.58 3.47a1 1 0 0 0 .99.84H6v10a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V10h2.15a1 1 0 0 0 .99-.84l.58-3.47a2 2 0 0 0-1.34-2.23z" />
+    </svg>
+  ),
+  wishlist: (
+    <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+      <path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z" />
+    </svg>
+  ),
+  wardrobe: (
+    <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 7h18M3 7l2-3h14l2 3M3 7v13a1 1 0 0 0 1 1h16a1 1 0 0 0 1-1V7M12 7v14" />
+    </svg>
+  ),
+};
 
 interface ExtractResult {
   success: boolean;
@@ -740,7 +766,7 @@ function FittingRoom({
             opacity: saved ? 0.7 : 1,
           }}
         >
-          {saved ? '✓ Saved to Try-ons' : '♡ Save to Try-ons'}
+          {saved ? '✓ Saved to My Looks' : '♡ Save to My Looks'}
         </button>
       )}
 
@@ -1325,7 +1351,7 @@ function Popup() {
         <div style={{ padding: '24px 16px', textAlign: 'center' }}>
           <div style={{ fontFamily: SERIF, fontSize: '20px', marginBottom: '8px' }}>Almost ready</div>
           <p style={{ fontSize: '13px', color: C.muted, marginBottom: '20px', lineHeight: 1.5 }}>
-            Upload your photo once and start trying on clothes from any store.
+            Upload your photo once and start trying on clothes from supported stores.
           </p>
           <button onClick={() => openTab('/onboarding/photo')} style={btnPink}>Complete setup</button>
         </div>
@@ -1381,25 +1407,27 @@ function Popup() {
 
           {/* Tab bar */}
           <div style={{ display: 'flex', borderBottom: `1px solid ${C.border}`, background: C.surface }}>
-            {(['wishlist', 'fitting-room', 'wardrobe', 'tryons'] as TabKey[]).map((k) => {
+            {(['fitting-room', 'tryons', 'wishlist', 'wardrobe'] as TabKey[]).map((k) => {
               const labels: Record<TabKey, string> = {
-                tryons:         tryOns.length  ? `Try-ons (${tryOns.length})` : 'Try-ons',
+                'fitting-room': 'Fitting Room',
+                tryons:         tryOns.length  ? `My Looks (${tryOns.length})` : 'My Looks',
                 wishlist:       wishlist.length ? `Wishlist (${wishlist.length})` : 'Wishlist',
                 wardrobe:       wardrobe.length ? `Wardrobe (${wardrobe.length})` : 'Wardrobe',
-                'fitting-room': 'Fitting Room',
               };
               const active = tab === k;
               return (
                 <button key={k} onClick={() => setTab(k)} style={{
-                  flex: 1, padding: '9px 4px',
-                  fontSize: '9px', fontWeight: active ? 600 : 400,
-                  color: active ? C.pink : C.muted,
+                  flex: 1, padding: '9px 2px',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px',
+                  fontSize: '10px', fontWeight: active ? 500 : 400,
+                  color: active ? C.ink : C.muted,
                   background: 'transparent', border: 'none',
-                  borderBottom: `2px solid ${active ? C.pink : 'transparent'}`,
+                  borderBottom: `1.5px solid ${active ? C.pink : 'transparent'}`,
                   marginBottom: '-1px', cursor: 'pointer',
-                  fontFamily: MONO, letterSpacing: '0.04em',
-                  textTransform: 'uppercase', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                  fontFamily: SANS,
+                  whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
                 }}>
+                  {TAB_ICONS[k]}
                   {labels[k]}
                 </button>
               );
@@ -1419,9 +1447,9 @@ function Popup() {
               ) : tryOns.length === 0 ? (
                 <div style={{ textAlign: 'center', padding: '24px 0' }}>
                   <div style={{ fontSize: '32px', marginBottom: '8px' }}>👗</div>
-                  <div style={{ fontFamily: SERIF, fontSize: '17px', marginBottom: '6px' }}>No try-ons yet</div>
+                  <div style={{ fontFamily: SERIF, fontSize: '17px', marginBottom: '6px' }}>No looks yet</div>
                   <p style={{ fontSize: '12px', color: C.muted, lineHeight: 1.5 }}>
-                    Build an outfit in the Fitting Room to see it here.
+                    Build an outfit in the Fitting Room, then save it to see it here.
                   </p>
                 </div>
               ) : (
