@@ -1349,7 +1349,7 @@ function Popup() {
 
       {/* ── Main UI ── */}
       {status === 'idle' && (
-        <div style={{ display: 'flex', flexDirection: 'column', maxHeight: '520px', position: 'relative' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', position: 'relative' }}>
           {/* Action bar */}
           <div style={{ background: C.ink, borderBottom: `0.5px solid rgba(255,255,255,0.08)`, padding: '10px 16px' }}>
             <button
