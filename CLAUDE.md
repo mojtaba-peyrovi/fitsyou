@@ -28,6 +28,25 @@ The rule from PLAN.md applies here too: **neither PLAN.md nor ClickUp is the sou
 
 After every task is completed, it MUST be marked done in **both** PLAN.md **and** ClickUp. Do not consider a task finished until both reflect it.
 
+## Photo consent flow
+
+Chrome Web Store review requires prominent in-product disclosure before biometric data (photos) are processed.
+
+**Extension (popup):** Modal gate shown before first try-on generation (before "Generate the look" button fires). User must check:
+- Photo consent: "I consent to fitsyou sending my photo to OpenAI... [contractual guarantee data not used for training]"
+- Age 18+: "I confirm I am 18 years of age or older"
+
+Modal mentions users can disable face usage in profile settings. Consent stored in `chrome.storage.local['fitsyou_photo_consent']` (boolean), logged to backend at `/api/user/photo-consent` with timestamp.
+
+**Web app (onboarding):** Photo upload at `/onboarding/photo` already gates on same two checkboxes + re-asserts consent on profile photo changes. Backend enforces `consent=true` and `age_confirmed=true` on all body photo uploads (`app/api/user/photo/route.ts` lines 36–42).
+
+## Extension manifest permissions
+
+**Host permissions are scoped** to supported retailer domains only:
+- `*://*.zara.com/*`, `*://*.asos.com/*`, `*://*.hm.com/*`, `*://*.zalando.*/*`, `*://*.mango.com/*`
+
+Removed overly-broad `<all_urls>` match patterns. Content scripts and web_accessible_resources also scoped to retailer domains to reduce attack surface and address Chrome Web Store review.
+
 ## Tool / API / MCP documentation rule
 
 Any new external tool, API, MCP server, or third-party service introduced by the agent and approved by the owner **must be documented immediately** — in the same response where it is first used — across all three places:
