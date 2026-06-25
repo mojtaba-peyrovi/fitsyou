@@ -170,12 +170,12 @@ function inferGarmentCategory(title: string | null | undefined): GarmentCategory
   return null;
 }
 
+// Accessories aren't covered by try-on generation yet, so no chip for them.
 const WISHLIST_FILTER_CATEGORIES: { value: GarmentCategory; label: string }[] = [
   { value: 'top', label: 'Top' },
   { value: 'bottom', label: 'Bottom' },
   { value: 'outerwear', label: 'Outerwear' },
   { value: 'shoes', label: 'Shoes' },
-  { value: 'accessory', label: 'Accessories' },
 ];
 
 // Same 5 retailers as fitsyou-web-app's StoreLogo — keys match how the backend
@@ -1570,7 +1570,10 @@ function Popup() {
               ) : (
                 <div>
                   {/* Store filter logos */}
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '10px' }}>
+                  <div style={{ fontSize: '10px', fontWeight: 600, color: C.muted, textAlign: 'center', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '10px' }}>
+                    Stores you can add from
+                  </div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: '12px', marginBottom: '18px' }}>
                     {FILTER_STORES.map((s) => {
                       const active = wishlistFilterStore === s.key;
                       return (
@@ -1582,7 +1585,7 @@ function Popup() {
                           aria-pressed={active}
                           style={{
                             display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            width: '32px', height: '32px', borderRadius: '0', flexShrink: 0,
+                            width: '34px', height: '34px', borderRadius: '50%', flexShrink: 0,
                             border: `1.5px solid ${active ? C.pink : C.border}`,
                             background: active ? C.blush : C.surface,
                             opacity: wishlistFilterStore && !active ? 0.45 : 1,
