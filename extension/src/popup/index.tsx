@@ -1,6 +1,6 @@
 import { render, createContext } from 'preact';
 import type { JSX } from 'preact';
-import { useState, useEffect, useRef, useContext } from 'preact/hooks';
+import { useState, useEffect, useRef, useContext, useMemo } from 'preact/hooks';
 import {
   initAnalytics, identifyUser, capture,
   getAnalyticsConsent, setAnalyticsConsent, clearAnalyticsConsent,
@@ -148,6 +148,45 @@ function storeName(url: string): string {
     return (ccSld.has(sld) && parts.length >= 3 ? parts[parts.length - 3] : sld) ?? '';
   } catch { return ''; }
 }
+
+// ─── Garment category inference (mirrors fitsyou-web-app/lib/garments.ts) ────
+// Wishlist items only carry a retailer title, never a stored category, so we
+// infer it the same way the web app does for outfit validation.
+type GarmentCategory = 'top' | 'bottom' | 'dress' | 'outerwear' | 'shoes' | 'accessory';
+const CATEGORY_KEYWORDS: ReadonlyArray<[GarmentCategory, RegExp]> = [
+  ['dress', /\b(jumpsuit|romper|playsuit|dungarees|overalls)\b/i],
+  ['shoes', /\b(shoes?|sneakers?|trainers?|boots?|heels?|sandals?|loafers?|flats?|pumps?|footwear|mules?|espadrilles?|clogs?|brogues?|derbys?|oxfords?)\b/i],
+  ['accessory', /\b(bag|handbag|tote|backpack|hat|cap|beanie|scarf|belt|gloves?|socks?|watch|jewel\w*|necklace|earrings?|bracelet|sunglasses|glasses|tie|ring|wallet|purse|clutch)\b/i],
+  ['outerwear', /\b(jacket|coat|blazer|parka|trench|anorak|gilet|overcoat|puffer|windbreaker|raincoat|bomber|peacoat|mac)\b/i],
+  ['bottom', /\b(jeans?|trousers?|pants?|chinos?|shorts?|skirt|leggings?|joggers?|sweatpants?|culottes?|slacks?|cargos?)\b/i],
+  ['top', /\b(shirt|t-?shirt|tee|tops?|blouse|sweater|jumper|hoodie|cardigan|polo|tank|camisole|knit|pullover|turtleneck|sweatshirt|vest)\b/i],
+  ['dress', /\b(dress|gown|frock)\b/i],
+];
+function inferGarmentCategory(title: string | null | undefined): GarmentCategory | null {
+  if (!title) return null;
+  for (const [category, re] of CATEGORY_KEYWORDS) {
+    if (re.test(title)) return category;
+  }
+  return null;
+}
+
+const WISHLIST_FILTER_CATEGORIES: { value: GarmentCategory; label: string }[] = [
+  { value: 'top', label: 'Top' },
+  { value: 'bottom', label: 'Bottom' },
+  { value: 'outerwear', label: 'Outerwear' },
+  { value: 'shoes', label: 'Shoes' },
+  { value: 'accessory', label: 'Accessories' },
+];
+
+// Same 5 retailers as fitsyou-web-app's StoreLogo — keys match how the backend
+// normalizes store_name (hostname's second-level domain label).
+const FILTER_STORES: { key: string; label: string; domain: string }[] = [
+  { key: 'zalando', label: 'Zalando', domain: 'zalando.com' },
+  { key: 'zara', label: 'Zara', domain: 'zara.com' },
+  { key: 'hm', label: 'H&M', domain: 'hm.com' },
+  { key: 'asos', label: 'ASOS', domain: 'asos.com' },
+  { key: 'mango', label: 'Mango', domain: 'mango.com' },
+];
 
 const R2_PREFIXES = ['wardrobe/', 'try-ons/', 'user-photos/', 'user-faces/', 'product-images/'];
 function authKeyFor(src: string): string | null {
@@ -889,6 +928,17 @@ function Popup() {
   const [tryOns, setTryOns]           = useState<TryOnItem[]>([]);
   const [listsLoaded, setListsLoaded] = useState(false);
 
+  // Wishlist filters
+  const [wishlistFilterCategory, setWishlistFilterCategory] = useState<GarmentCategory | null>(null);
+  const [wishlistFilterStore, setWishlistFilterStore]       = useState<string | null>(null);
+  const displayWishlist = useMemo(() => {
+    return wishlist.filter((item) => {
+      if (wishlistFilterStore && (item.store_name ?? '').toLowerCase() !== wishlistFilterStore) return false;
+      if (wishlistFilterCategory && inferGarmentCategory(item.product_title) !== wishlistFilterCategory) return false;
+      return true;
+    });
+  }, [wishlist, wishlistFilterCategory, wishlistFilterStore]);
+
   // Action bar state (save-to-wishlist)
   const [saveState, setSaveState]     = useState<'idle' | 'working'>('idle');
   const [toast, setToast]             = useState<{ msg: string; type: 'success' | 'error'; persistent?: boolean } | null>(null);
@@ -1518,8 +1568,86 @@ function Popup() {
                   </p>
                 </div>
               ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  {wishlist.map((item) => (
+                <div>
+                  {/* Store filter logos */}
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '10px' }}>
+                    {FILTER_STORES.map((s) => {
+                      const active = wishlistFilterStore === s.key;
+                      return (
+                        <button
+                          key={s.key}
+                          onClick={() => setWishlistFilterStore(active ? null : s.key)}
+                          title={s.label}
+                          aria-label={`Filter by ${s.label}`}
+                          aria-pressed={active}
+                          style={{
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            width: '32px', height: '32px', borderRadius: '0', flexShrink: 0,
+                            border: `1.5px solid ${active ? C.pink : C.border}`,
+                            background: active ? C.blush : C.surface,
+                            opacity: wishlistFilterStore && !active ? 0.45 : 1,
+                            cursor: 'pointer', padding: 0,
+                          }}
+                        >
+                          <img
+                            src={`https://www.google.com/s2/favicons?domain=${s.domain}&sz=64`}
+                            alt={s.label}
+                            style={{ width: '16px', height: '16px', objectFit: 'contain' }}
+                          />
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {/* Category filter pills */}
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '12px' }}>
+                    <button
+                      onClick={() => setWishlistFilterCategory(null)}
+                      style={{
+                        fontSize: '11px', fontWeight: 600, padding: '4px 10px', borderRadius: '0',
+                        border: `1.5px solid ${wishlistFilterCategory === null ? C.pink : C.border}`,
+                        background: wishlistFilterCategory === null ? C.pink : 'transparent',
+                        color: wishlistFilterCategory === null ? '#fff' : C.ink,
+                        cursor: 'pointer', fontFamily: SANS,
+                      }}
+                    >
+                      All
+                    </button>
+                    {WISHLIST_FILTER_CATEGORIES.map((c) => {
+                      const active = wishlistFilterCategory === c.value;
+                      return (
+                        <button
+                          key={c.value}
+                          onClick={() => setWishlistFilterCategory(active ? null : c.value)}
+                          style={{
+                            fontSize: '11px', fontWeight: 600, padding: '4px 10px', borderRadius: '0',
+                            border: `1.5px solid ${active ? C.pink : C.border}`,
+                            background: active ? C.pink : 'transparent',
+                            color: active ? '#fff' : C.ink,
+                            cursor: 'pointer', fontFamily: SANS,
+                          }}
+                        >
+                          {c.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {displayWishlist.length === 0 ? (
+                    <div style={{ textAlign: 'center', padding: '20px 0' }}>
+                      <p style={{ fontSize: '12px', color: C.muted, marginBottom: '8px' }}>
+                        No items match these filters.
+                      </p>
+                      <button
+                        onClick={() => { setWishlistFilterCategory(null); setWishlistFilterStore(null); }}
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.pinkDark, fontSize: '12px', textDecoration: 'underline', padding: 0 }}
+                      >
+                        Clear filters
+                      </button>
+                    </div>
+                  ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {displayWishlist.map((item) => (
                     <div
                       key={item.id}
                       onClick={() => item.product_url && chrome.tabs.create({ url: item.product_url })}
@@ -1559,7 +1687,9 @@ function Popup() {
                       >✕</button>
                     </div>
                   ))}
-                  <button onClick={() => setTab('fitting-room')} style={{ ...btnPink, marginTop: '4px' }}>
+                  </div>
+                  )}
+                  <button onClick={() => setTab('fitting-room')} style={{ ...btnPink, marginTop: '12px' }}>
                     Build an outfit in Fitting Room →
                   </button>
                 </div>
