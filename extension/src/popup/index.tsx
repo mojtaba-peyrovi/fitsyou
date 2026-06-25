@@ -171,7 +171,7 @@ function inferGarmentCategory(title: string | null | undefined): GarmentCategory
 }
 
 // Accessories aren't covered by try-on generation yet, so no chip for them.
-const WISHLIST_FILTER_CATEGORIES: { value: GarmentCategory; label: string }[] = [
+const GARMENT_FILTER_CATEGORIES: { value: GarmentCategory; label: string }[] = [
   { value: 'top', label: 'Top' },
   { value: 'bottom', label: 'Bottom' },
   { value: 'outerwear', label: 'Outerwear' },
@@ -939,6 +939,14 @@ function Popup() {
     });
   }, [wishlist, wishlistFilterCategory, wishlistFilterStore]);
 
+  // Wardrobe filters
+  const [wardrobeFilterCategory, setWardrobeFilterCategory] = useState<GarmentCategory | null>(null);
+  const displayWardrobe = useMemo(() => {
+    return wardrobeFilterCategory
+      ? wardrobe.filter((item) => item.category === wardrobeFilterCategory)
+      : wardrobe;
+  }, [wardrobe, wardrobeFilterCategory]);
+
   // Action bar state (save-to-wishlist)
   const [saveState, setSaveState]     = useState<'idle' | 'working'>('idle');
   const [toast, setToast]             = useState<{ msg: string; type: 'success' | 'error'; persistent?: boolean } | null>(null);
@@ -1616,7 +1624,7 @@ function Popup() {
                     >
                       All
                     </button>
-                    {WISHLIST_FILTER_CATEGORIES.map((c) => {
+                    {GARMENT_FILTER_CATEGORIES.map((c) => {
                       const active = wishlistFilterCategory === c.value;
                       return (
                         <button
@@ -1785,22 +1793,70 @@ function Popup() {
                     </div>
                   ) : (
                     <>
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
-                        {wardrobe.map((item) => (
-                          <div key={item.id} style={{ background: C.surface, borderRadius: '0', border: `0.5px solid ${C.border}`, overflow: 'hidden' }}>
-                            <AuthImg
-                              src={item.image_url} token={token} alt={item.name ?? 'Item'}
-                              style={{ width: '100%', height: '110px', objectFit: 'contain', background: C.bone, display: 'block' }}
-                            />
-                            <div style={{ padding: '6px 8px 8px' }}>
-                              {item.category && <StoreTag name={item.category} />}
-                              <div style={{ fontSize: '11px', fontWeight: 600, color: C.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: '2px' }}>
-                                {item.name ?? 'Untitled'}
+                      {/* Category filter pills */}
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '12px' }}>
+                        <button
+                          onClick={() => setWardrobeFilterCategory(null)}
+                          style={{
+                            fontSize: '11px', fontWeight: 600, padding: '4px 10px', borderRadius: '0',
+                            border: `1.5px solid ${wardrobeFilterCategory === null ? C.pink : C.border}`,
+                            background: wardrobeFilterCategory === null ? C.pink : 'transparent',
+                            color: wardrobeFilterCategory === null ? '#fff' : C.ink,
+                            cursor: 'pointer', fontFamily: SANS,
+                          }}
+                        >
+                          All
+                        </button>
+                        {GARMENT_FILTER_CATEGORIES.map((c) => {
+                          const active = wardrobeFilterCategory === c.value;
+                          return (
+                            <button
+                              key={c.value}
+                              onClick={() => setWardrobeFilterCategory(active ? null : c.value)}
+                              style={{
+                                fontSize: '11px', fontWeight: 600, padding: '4px 10px', borderRadius: '0',
+                                border: `1.5px solid ${active ? C.pink : C.border}`,
+                                background: active ? C.pink : 'transparent',
+                                color: active ? '#fff' : C.ink,
+                                cursor: 'pointer', fontFamily: SANS,
+                              }}
+                            >
+                              {c.label}
+                            </button>
+                          );
+                        })}
+                      </div>
+
+                      {displayWardrobe.length === 0 ? (
+                        <div style={{ textAlign: 'center', padding: '20px 0' }}>
+                          <p style={{ fontSize: '12px', color: C.muted, marginBottom: '8px' }}>
+                            No items match this filter.
+                          </p>
+                          <button
+                            onClick={() => setWardrobeFilterCategory(null)}
+                            style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.pinkDark, fontSize: '12px', textDecoration: 'underline', padding: 0 }}
+                          >
+                            Clear filter
+                          </button>
+                        </div>
+                      ) : (
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                          {displayWardrobe.map((item) => (
+                            <div key={item.id} style={{ background: C.surface, borderRadius: '0', border: `0.5px solid ${C.border}`, overflow: 'hidden' }}>
+                              <AuthImg
+                                src={item.image_url} token={token} alt={item.name ?? 'Item'}
+                                style={{ width: '100%', height: '110px', objectFit: 'contain', background: C.bone, display: 'block' }}
+                              />
+                              <div style={{ padding: '6px 8px 8px' }}>
+                                {item.category && <StoreTag name={item.category} />}
+                                <div style={{ fontSize: '11px', fontWeight: 600, color: C.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: '2px' }}>
+                                  {item.name ?? 'Untitled'}
+                                </div>
                               </div>
                             </div>
-                          </div>
-                        ))}
-                      </div>
+                          ))}
+                        </div>
+                      )}
                       <button onClick={() => setTab('fitting-room')} style={{ ...btnGhost, marginTop: '12px', width: '100%' }}>
                         Go to Fitting Room →
                       </button>
