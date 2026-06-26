@@ -32,6 +32,13 @@ const SERIF = "'Playfair Display', Georgia, serif";
 const SANS  = "'Archivo', system-ui, sans-serif";
 const MONO  = "'Archivo', system-ui, sans-serif";
 
+// Generating-progress ring geometry (mirrors fitsyou-web-app FittingRoomTab's
+// GeneratingProgressOverlay so the Mirror reads identically on both surfaces).
+const RING_SIZE = 104;
+const RING_STROKE = 6;
+const RING_RADIUS = (RING_SIZE - RING_STROKE) / 2;
+const RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS;
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 type PopupState = 'checking' | 'signed-out' | 'needs-setup' | 'idle' | 'manual';
 type TabKey = 'tryons' | 'wishlist' | 'wardrobe' | 'fitting-room';
@@ -680,13 +687,29 @@ function FittingRoom({
         {/* Big square canvas */}
         <div style={{
           position: 'relative', width: '100%', paddingBottom: '100%', overflow: 'hidden',
-          background: 'linear-gradient(155deg, #EEF1EE 0%, #D8DEDB 52%, #9FA8A3 100%)',
-          boxShadow: 'inset 0 0 48px rgba(22,22,22,0.06)',
+          boxShadow: phase === 'generating' ? 'inset 0 0 60px rgba(255,46,136,0.12)' : 'inset 0 0 48px rgba(22,22,22,0.06)',
+          transition: 'box-shadow 0.5s ease',
         }}>
+          {/* Light (idle/done) backdrop */}
+          <div style={{
+            position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+            background: 'linear-gradient(155deg, #EEF1EE 0%, #D8DEDB 52%, #9FA8A3 100%)',
+            opacity: phase === 'generating' ? 0 : 1, transition: 'opacity 0.5s ease',
+          }} />
+          {/* Dark (generating) backdrop — matches the web app's Mirror exactly */}
+          <div style={{
+            position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+            background: [
+              'radial-gradient(ellipse at 36% 26%, rgba(60,20,30,0.4) 0%, transparent 50%)',
+              'radial-gradient(ellipse at 72% 78%, rgba(255,46,136,0.12) 0%, transparent 45%)',
+              'linear-gradient(155deg, #1A1A1A 0%, #0D0D0D 55%, #050505 100%)',
+            ].join(', '),
+            opacity: phase === 'generating' ? 1 : 0, transition: 'opacity 0.5s ease',
+          }} />
           <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
 
-            {/* State: result, ready, or empty */}
-            {phase === 'done' && results.length > 0 ? (
+            {/* State: result, ready, or empty (suppressed while generating — the ring overlay owns that state) */}
+            {phase === 'generating' ? null : phase === 'done' && results.length > 0 ? (
               results.length === 1 ? (
                 <AuthImg
                   src={results[0]} token={token} alt="Generated outfit"
@@ -754,16 +777,39 @@ function FittingRoom({
               </div>
             )}
 
-            {/* Generating progress overlay */}
+            {/* Generating progress overlay — circular ring matching fitsyou-web-app's Mirror */}
             {phase === 'generating' && (
-              <div style={{ position: 'absolute', left: '16px', right: '16px', bottom: '16px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-                  <span style={{ fontFamily: MONO, fontSize: '10px', color: C.ink }}>Generating…</span>
-                  <span style={{ fontFamily: MONO, fontSize: '10px', color: C.ink }}>{Math.round(progress)}%</span>
+              <div style={{
+                position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+                display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '12px',
+              }}>
+                <div style={{ position: 'relative', width: `${RING_SIZE}px`, height: `${RING_SIZE}px` }}>
+                  <svg width={RING_SIZE} height={RING_SIZE} style={{ transform: 'rotate(-90deg)' }}>
+                    <defs>
+                      <linearGradient id="fitsyou-ext-progress-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                        <stop offset="0%" stop-color={C.pink} />
+                        <stop offset="100%" stop-color="#FF8FC2" />
+                      </linearGradient>
+                    </defs>
+                    <circle cx={RING_SIZE / 2} cy={RING_SIZE / 2} r={RING_RADIUS} fill="none" stroke="rgba(255,255,255,0.14)" stroke-width={RING_STROKE} />
+                    <circle
+                      cx={RING_SIZE / 2}
+                      cy={RING_SIZE / 2}
+                      r={RING_RADIUS}
+                      fill="none"
+                      stroke="url(#fitsyou-ext-progress-gradient)"
+                      stroke-width={RING_STROKE}
+                      stroke-linecap="round"
+                      stroke-dasharray={RING_CIRCUMFERENCE}
+                      stroke-dashoffset={RING_CIRCUMFERENCE - (Math.min(100, Math.max(0, progress)) / 100) * RING_CIRCUMFERENCE}
+                      style={{ transition: 'stroke-dashoffset 0.25s ease' }}
+                    />
+                  </svg>
+                  <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <span style={{ fontFamily: MONO, fontSize: '17px', fontWeight: 600, color: '#fff' }}>{Math.round(progress)}%</span>
+                  </div>
                 </div>
-                <div style={{ background: 'rgba(18,18,18,0.18)', borderRadius: '4px', height: '4px', overflow: 'hidden' }}>
-                  <div style={{ height: '100%', background: C.pink, width: `${progress}%`, transition: 'width 0.3s ease', borderRadius: '4px' }} />
-                </div>
+                <span style={{ fontFamily: MONO, fontSize: '10px', color: 'rgba(255,255,255,0.7)' }}>Generating your look…</span>
               </div>
             )}
 
