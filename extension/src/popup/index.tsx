@@ -396,12 +396,11 @@ function Toast({ msg, type, onDismiss }: { msg: string; type: 'success' | 'error
 
 // ─── Fitting Room (inline in popup) ──────────────────────────────────────────
 function FittingRoom({
-  wishlist, wardrobe, token, onOpenDashboard, onTryOnSaved,
+  wishlist, wardrobe, token, onTryOnSaved,
 }: {
   wishlist: WishlistItem[];
   wardrobe: WardrobeItem[];
   token: string;
-  onOpenDashboard: () => void;
   onTryOnSaved: () => void;
 }) {
   const [selected, setSelected] = useState<ItemRef[]>([]);
@@ -882,10 +881,6 @@ function FittingRoom({
           </div>
         )}
       </div>
-
-      <button onClick={onOpenDashboard} style={{ ...btnGhost, marginTop: '4px' }}>
-        Open full Fitting Room →
-      </button>
 
     </div>
   );
@@ -1930,7 +1925,6 @@ function Popup() {
                   wishlist={wishlist}
                   wardrobe={wardrobe}
                   token={token}
-                  onOpenDashboard={() => openTab('/dashboard?tab=fitting-room')}
                   onTryOnSaved={() => setListsLoaded(false)}
                 />
               )}
