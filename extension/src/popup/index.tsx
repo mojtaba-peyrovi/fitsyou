@@ -731,7 +731,7 @@ function FittingRoom({
               </div>
             ) : (
               <div style={{ textAlign: 'center', padding: '0 28px' }}>
-                <div style={{ fontSize: '40px' }}>🎨</div>
+                <div style={{ fontSize: '40px' }}>🪞</div>
                 <div style={{ marginTop: '10px', fontSize: '12px', color: C.slate, lineHeight: 1.5 }}>
                   Ready when you are — hit Generate to see it on you.
                 </div>
