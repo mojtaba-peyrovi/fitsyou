@@ -1140,6 +1140,15 @@ function Popup() {
       return;
     }
 
+    // Accessories (hats, bags, jewelry, ...) aren't covered by try-on generation
+    // yet — stop here with a friendly message instead of hitting /api/fit and
+    // /api/wishlist for an item the Fitting Room can never render.
+    if (inferGarmentCategory(ext.productTitle) === 'accessory') {
+      setSaveState('idle');
+      showToast('Accessories like hats, bags & jewelry aren’t supported for try-on yet — coming soon!', 'error', true);
+      return;
+    }
+
     const tk = (await getToken()) ?? token;
     if (!tk) { setSaveState('idle'); setStatus('signed-out'); return; }
 
@@ -1185,7 +1194,7 @@ function Popup() {
 
     setSaveState('idle');
     if (!res.ok) {
-      showToast(res.error ?? 'Save failed', 'error', res.code === 'gender_conflict');
+      showToast(res.error ?? 'Save failed', 'error', res.code === 'gender_conflict' || res.code === 'accessory_unsupported');
       return;
     }
 
