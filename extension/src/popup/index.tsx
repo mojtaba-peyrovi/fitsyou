@@ -71,6 +71,7 @@ const TAB_ICONS: Record<TabKey, JSX.Element> = {
 interface ExtractResult {
   success: boolean;
   imageUrl?: string;
+  imageCandidates?: string[];
   productTitle?: string;
   price?: string | null;
   productUrl?: string;
@@ -1185,6 +1186,9 @@ function Popup() {
     const res = await apiPost(tk, '/api/wishlist', {
       product_url: tabUrl,
       product_image_url: ext.imageUrl,
+      // Hand the shortlist to the backend so it runs the same item-only vision
+      // pick the webapp paste flow does — one-click save lands the clean shot.
+      candidates: ext.imageCandidates,
       product_title: normalizedTitle,
       store_name: storeName(tabUrl),
       price: ext.price ?? null,

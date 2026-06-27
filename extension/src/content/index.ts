@@ -1,6 +1,7 @@
 interface ExtractResult {
   success: boolean;
   imageUrl?: string;
+  imageCandidates?: string[];
   productTitle?: string;
   price?: string | null;
   productUrl?: string;
@@ -434,6 +435,31 @@ function extractProductImage(): string | null {
   );
 }
 
+/**
+ * Ranked product-image candidates (top 5) for the server-side gpt-4o-mini
+ * vision pick in /api/wishlist. Our DOM scoring already prefers clean shots,
+ * but on numeric galleries it can still lead with a styled hero; handing the
+ * shortlist to the backend lets it choose the item-only shot — the same step
+ * the webapp paste flow runs. `primary` is forced to the front so the heuristic
+ * best is always one of the options (and the server's fallback if vision abstains).
+ */
+function extractImageCandidates(primary: string): string[] {
+  const seen = new Set<string>();
+  const scored: ScoredImage[] = [];
+  for (const img of Array.from(document.querySelectorAll<HTMLImageElement>('img'))) {
+    if (!isValidProductImage(img)) continue;
+    const src = bestSrc(img);
+    if (!src || seen.has(src)) continue;
+    seen.add(src);
+    const rect = img.getBoundingClientRect();
+    const areaNorm = Math.min((rect.width * rect.height) / 400_000, 1) * 5;
+    scored.push({ src, score: scoreProductShot(img, src) + areaNorm });
+  }
+  scored.sort((a, b) => b.score - a.score);
+  const ordered = [primary, ...scored.map((c) => c.src).filter((s) => s !== primary)];
+  return ordered.slice(0, 5);
+}
+
 const CURRENCY_SYMBOLS: Record<string, string> = {
   EUR: '€', USD: '$', GBP: '£', JPY: '¥', CHF: 'CHF ', SEK: 'kr ', NOK: 'kr ', DKK: 'kr ',
 };
@@ -509,6 +535,7 @@ chrome.runtime.onMessage.addListener((
     sendResponse({
       success: true,
       imageUrl,
+      imageCandidates: extractImageCandidates(imageUrl),
       productTitle: extractProductTitle(),
       price: extractProductPrice(),
       productUrl: location.href,
