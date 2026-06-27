@@ -454,7 +454,13 @@ function FittingRoom({
   const isSelected = (ref: ItemRef) => selected.some((s) => s.source === ref.source && s.id === ref.id);
 
   function toggle(ref: ItemRef) {
-    setResults([]); setSaved(false); setError('');
+    // The Mirror must be cleared (try-on discarded/saved) before the selection
+    // can change again — otherwise toggling here used to silently wipe the
+    // result the user is currently looking at with no warning.
+    if (phase === 'done' && results.length > 0) {
+      setError('Clear your Mirror first — remove the try-on currently showing before adding new items.');
+      return;
+    }
     setSelected((prev) =>
       prev.some((s) => s.source === ref.source && s.id === ref.id)
         ? prev.filter((s) => !(s.source === ref.source && s.id === ref.id))
