@@ -375,22 +375,22 @@ function extractWithSiteSelectors(): string | null {
   return bestScored(candidates);
 }
 
-function extractWithGenericSelectors(): string | null {
-  const selectors = [
-    '[data-main-image]',
-    'img[class*="product-image"]',
-    'img[class*="main-image"]',
-    'img[id*="main-image"]',
-    'img[class*="ProductImage"]',
-    'img[class*="hero-image"]',
-    'img[data-testid*="product"]',
-    '[data-testid*="product"] img',
-  ];
+const GENERIC_IMAGE_SELECTORS = [
+  '[data-main-image]',
+  'img[class*="product-image"]',
+  'img[class*="main-image"]',
+  'img[id*="main-image"]',
+  'img[class*="ProductImage"]',
+  'img[class*="hero-image"]',
+  'img[data-testid*="product"]',
+  '[data-testid*="product"] img',
+];
 
+function extractWithGenericSelectors(): string | null {
   const seen = new Set<string>();
   const candidates: ScoredImage[] = [];
 
-  for (const selector of selectors) {
+  for (const selector of GENERIC_IMAGE_SELECTORS) {
     for (const el of Array.from(document.querySelectorAll<HTMLImageElement>(selector))) {
       if (!isValidProductImage(el)) continue;
       const src = bestSrc(el);
@@ -435,29 +435,99 @@ function extractProductImage(): string | null {
   );
 }
 
-/**
- * Ranked product-image candidates (top 5) for the server-side gpt-4o-mini
- * vision pick in /api/wishlist. Our DOM scoring already prefers clean shots,
- * but on numeric galleries it can still lead with a styled hero; handing the
- * shortlist to the backend lets it choose the item-only shot — the same step
- * the webapp paste flow runs. `primary` is forced to the front so the heuristic
- * best is always one of the options (and the server's fallback if vision abstains).
- */
-function extractImageCandidates(primary: string): string[] {
-  const seen = new Set<string>();
-  const scored: ScoredImage[] = [];
-  for (const img of Array.from(document.querySelectorAll<HTMLImageElement>('img'))) {
-    if (!isValidProductImage(img)) continue;
-    const src = bestSrc(img);
-    if (!src || seen.has(src)) continue;
-    seen.add(src);
-    const rect = img.getBoundingClientRect();
-    const areaNorm = Math.min((rect.width * rect.height) / 400_000, 1) * 5;
-    scored.push({ src, score: scoreProductShot(img, src) + areaNorm });
+/** Stable per-photo identity: the filename, ignoring size/CDN query variants.
+ * Lets a small gallery thumbnail and the full-size main shot of the same photo
+ * collapse to one candidate. */
+function photoIdentity(src: string): string {
+  try {
+    const u = new URL(src, location.href);
+    return (u.pathname.split('/').filter(Boolean).pop() ?? u.pathname).toLowerCase();
+  } catch {
+    return src.toLowerCase();
   }
-  scored.sort((a, b) => b.score - a.score);
-  const ordered = [primary, ...scored.map((c) => c.src).filter((s) => s !== primary)];
-  return ordered.slice(0, 5);
+}
+
+/** Width hint from a URL's size param/segment (e.g. imwidth=78, w=750, 600x800). */
+function imageWidthHint(src: string): number {
+  const m =
+    src.match(/[?&](?:imwidth|width|wid|w|sw|dw)=(\d{2,4})/i) ??
+    src.match(/(\d{3,4})x\d{3,4}/) ??
+    src.match(/[/_-]w[/_=-]?(\d{2,4})\b/i);
+  return m ? parseInt(m[1], 10) : 0;
+}
+
+/** Raise a CDN width *query param* to a large value so we save full-res, not a
+ * thumbnail. Only touches well-supported query params (imwidth/width/w/…) and
+ * leaves path-encoded sizes alone, where a guessed value could 404. */
+function upgradeResolution(src: string): string {
+  return src.replace(/([?&](?:imwidth|width|wid|w|sw|dw)=)\d{2,4}/i, `$11800`);
+}
+
+/**
+ * Ranked product-image candidates (top 6) for the server-side gpt-4o-mini
+ * vision pick in /api/wishlist. The flat-lay / item-only shot usually lives
+ * ONLY as a small gallery thumbnail (the main image is the styled hero), so —
+ * unlike extractProductImage — we deliberately skip the 200px rendered-size
+ * gate here and pull thumbnails too, dedupe each photo to its highest-res
+ * variant, then upgrade the CDN width so the saved image is full quality.
+ * `primary` is forced to the front so the heuristic best is always an option
+ * (and the server's fallback if vision abstains).
+ */
+// Containers that hold the PDP gallery thumbnail strip across most retailers —
+// this is where the flat-lay usually lives when it's not the main image.
+const GALLERY_CONTAINER_SELECTORS = [
+  '[class*="thumb" i] img',
+  '[class*="gallery" i] img',
+  '[class*="swatch" i] img',
+  '[class*="carousel" i] img',
+];
+
+function extractImageCandidates(primary: string): string[] {
+  const hostname = location.hostname.replace(/^www\./, '');
+  const siteName = Object.keys(SITE_SELECTORS).find((k) => hostname.includes(k));
+
+  const byPhoto = new Map<string, { src: string; width: number; score: number }>();
+  const consider = (img: HTMLImageElement) => {
+    const src = bestSrc(img);
+    if (!src || !isValidProductUrl(src)) return;
+    // Drop true 1×1 placeholders, but keep small gallery thumbnails.
+    if (img.naturalWidth > 0 && img.naturalWidth < 10) return;
+    if (img.naturalHeight > 0 && img.naturalHeight < 10) return;
+    const key = photoIdentity(src);
+    const width = imageWidthHint(src);
+    const score = scoreProductShot(img, src);
+    const ex = byPhoto.get(key);
+    if (!ex) {
+      byPhoto.set(key, { src, width, score });
+    } else {
+      if (width > ex.width) { ex.src = src; ex.width = width; }
+      ex.score = Math.max(ex.score, score);
+    }
+  };
+
+  // Gallery-biased net: site selectors (precise on known sites) + generic
+  // product selectors + the thumbnail-strip containers. This captures the
+  // flat-lay thumbnail without dragging in every image on the page.
+  const selectors = [
+    ...(siteName ? SITE_SELECTORS[siteName] : []),
+    ...GENERIC_IMAGE_SELECTORS,
+    ...GALLERY_CONTAINER_SELECTORS,
+  ];
+  for (const sel of selectors) {
+    for (const el of Array.from(document.querySelectorAll<HTMLImageElement>(sel))) consider(el);
+  }
+  // Only widen to a full-page scan if the targeted net came up sparse.
+  if (byPhoto.size < 3) {
+    for (const img of Array.from(document.querySelectorAll<HTMLImageElement>('img'))) consider(img);
+  }
+
+  const ranked = Array.from(byPhoto.values())
+    .sort((a, b) => b.score - a.score)
+    .map((c) => upgradeResolution(c.src));
+
+  const primaryUp = upgradeResolution(primary);
+  const ordered = [primaryUp, ...ranked.filter((s) => photoIdentity(s) !== photoIdentity(primaryUp))];
+  return ordered.slice(0, 6);
 }
 
 const CURRENCY_SYMBOLS: Record<string, string> = {
