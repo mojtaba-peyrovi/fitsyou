@@ -416,6 +416,14 @@ function FittingRoom({
   const [photoConsentShown, setPhotoConsentShown] = useState(false);
   const [photoConsentPhotoAgreed, setPhotoConsentPhotoAgreed] = useState(false);
   const [photoConsentAgeAgreed, setPhotoConsentAgeAgreed] = useState(false);
+  // Post-result flow (mirrors fitsyou-web-app's FittingRoomTab: Feedback / Add
+  // to my looks / New Look) — kept in sync so both surfaces behave identically.
+  const [feedbackState, setFeedbackState] = useState<'idle' | 'submitting' | 'done'>('idle');
+  const [feedbackGiven, setFeedbackGiven] = useState<'like' | 'dislike' | null>(null);
+  const [feedbackModalOpen, setFeedbackModalOpen] = useState(false);
+  const [feedbackChoice, setFeedbackChoice] = useState<'like' | 'dislike' | null>(null);
+  const [issueText, setIssueText] = useState('');
+  const [discardConfirmOpen, setDiscardConfirmOpen] = useState(false);
 
   // Restore canvas state from storage on mount (survives popup close/reopen)
   useEffect(() => {
@@ -451,7 +459,30 @@ function FittingRoom({
     savingRef.current = false;
     setSelected([]); setPhase('idle'); setProgress(0);
     setResults([]); setSaving(false); setError('');
+    setFeedbackState('idle'); setFeedbackGiven(null);
+    setFeedbackModalOpen(false); setFeedbackChoice(null); setIssueText('');
     chrome.storage.local.remove('fitsyou_canvas');
+  }
+
+  function handleHeaderClear() {
+    // Once a look is showing, route through the same confirm modal as the
+    // "New Look" button — a bare link shouldn't be able to silently discard
+    // an ungenerated/unsaved result.
+    if (phase === 'done' && results.length > 0) setDiscardConfirmOpen(true);
+    else clearCanvas();
+  }
+
+  function discardResult() {
+    setDiscardConfirmOpen(false);
+    clearCanvas();
+  }
+
+  function discardAndRegenerate() {
+    setDiscardConfirmOpen(false);
+    setResults([]); setSaving(false); setError('');
+    setFeedbackState('idle'); setFeedbackGiven(null);
+    setFeedbackModalOpen(false); setFeedbackChoice(null); setIssueText('');
+    void generate();
   }
 
   const isSelected = (ref: ItemRef) => selected.some((s) => s.source === ref.source && s.id === ref.id);
@@ -492,6 +523,8 @@ function FittingRoom({
     }
     setPhase('generating');
     setProgress(0); setError(''); setResults([]); setSaving(false);
+    setFeedbackState('idle'); setFeedbackGiven(null);
+    setFeedbackModalOpen(false); setFeedbackChoice(null); setIssueText('');
     generatingRef.current = true;
 
     const start = Date.now();
@@ -518,16 +551,8 @@ function FittingRoom({
     capture('tryon_generated', { item_count: selected.length });
   }
 
-  async function saveToTryOns() {
-    // Guard against a double-click (or re-entry while the request is in flight):
-    // the button only reflects the saving/saved state after this await resolves,
-    // so without this ref a fast second click would POST the look a second time
-    // and create a duplicate row in My Looks.
-    if (results.length === 0 || savingRef.current) return;
-    savingRef.current = true;
-    setSaving(true);
-    const tk = (await getToken()) ?? token;
-    const outfitItems = selected.map((ref) => {
+  function getOutfitItems() {
+    return selected.map((ref) => {
       if (ref.source === 'wishlist') {
         const w = wishlist.find((w) => w.id === ref.id);
         return {
@@ -548,6 +573,18 @@ function FittingRoom({
         };
       }
     });
+  }
+
+  async function saveToTryOns() {
+    // Guard against a double-click (or re-entry while the request is in flight):
+    // the button only reflects the saving/saved state after this await resolves,
+    // so without this ref a fast second click would POST the look a second time
+    // and create a duplicate row in My Looks.
+    if (results.length === 0 || savingRef.current) return;
+    savingRef.current = true;
+    setSaving(true);
+    const tk = (await getToken()) ?? token;
+    const outfitItems = getOutfitItems();
     const firstWithUrl = outfitItems.find((i) => i.url);
     const res = await apiPost(tk, '/api/try-ons', {
       output_image_urls: results,
@@ -567,6 +604,32 @@ function FittingRoom({
       setError(res.error ?? 'Save failed');
       savingRef.current = false;
       setSaving(false);
+    }
+  }
+
+  async function addThenContinue() {
+    setDiscardConfirmOpen(false);
+    await saveToTryOns();
+  }
+
+  async function submitFeedback() {
+    if (!feedbackChoice) return;
+    setFeedbackState('submitting');
+    const tk = (await getToken()) ?? token;
+    const outfitItems = getOutfitItems();
+    const res = await apiPost(tk, '/api/tryon-feedback', {
+      feedback: feedbackChoice,
+      issue_description: issueText.trim() || null,
+      tryon_image_url: results[0] ?? null,
+      garment_image_url: outfitItems.find((i) => i.image)?.image ?? null,
+      generation_date: new Date().toISOString(),
+    });
+    if (res.ok) {
+      setFeedbackGiven(feedbackChoice);
+      setFeedbackState('done');
+      setFeedbackModalOpen(false);
+    } else {
+      setFeedbackState('idle');
     }
   }
 
@@ -686,6 +749,105 @@ function FittingRoom({
         </div>
       )}
 
+      {/* Feedback modal — "Rate this look", mirrors fitsyou-web-app FittingRoomTab */}
+      {feedbackModalOpen && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 1000, background: 'rgba(22,22,22,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ width: '300px', background: C.surface, padding: '20px', boxSizing: 'border-box', borderRadius: '0' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px' }}>
+              <div style={{ fontSize: '13px', fontWeight: 700, color: C.ink }}>Rate this look</div>
+              <button
+                onClick={() => setFeedbackModalOpen(false)}
+                disabled={feedbackState === 'submitting'}
+                style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: '15px', color: C.muted, lineHeight: 1 }}
+              >
+                ✕
+              </button>
+            </div>
+            <div style={{ display: 'flex', gap: '14px', justifyContent: 'center', marginBottom: '14px' }}>
+              <button
+                aria-label="Dislike"
+                onClick={() => setFeedbackChoice('dislike')}
+                style={{
+                  width: '52px', height: '52px', borderRadius: '50%', cursor: 'pointer',
+                  background: feedbackChoice === 'dislike' ? '#fee2e2' : 'transparent',
+                  border: `2px solid ${feedbackChoice === 'dislike' ? '#991b1b' : C.border}`,
+                  color: '#991b1b', fontSize: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                }}
+              >
+                ✕
+              </button>
+              <button
+                aria-label="Like"
+                onClick={() => setFeedbackChoice('like')}
+                style={{
+                  width: '52px', height: '52px', borderRadius: '50%', cursor: 'pointer',
+                  background: feedbackChoice === 'like' ? '#dcfce7' : 'transparent',
+                  border: `2px solid ${feedbackChoice === 'like' ? '#166534' : C.border}`,
+                  color: '#166534', fontSize: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                }}
+              >
+                ✓
+              </button>
+            </div>
+            <textarea
+              value={issueText}
+              onInput={(e) => setIssueText((e.target as HTMLTextAreaElement).value)}
+              placeholder="Any additional feedback? (optional)"
+              rows={3}
+              style={{
+                width: '100%', boxSizing: 'border-box', resize: 'none', padding: '8px',
+                fontFamily: SANS, fontSize: '12px', border: `1px solid ${C.border}`, borderRadius: 0,
+                marginBottom: '14px', background: C.cloud, color: C.ink,
+              }}
+            />
+            <button
+              onClick={submitFeedback}
+              disabled={!feedbackChoice || feedbackState === 'submitting'}
+              style={{
+                ...btnPink,
+                opacity: (!feedbackChoice || feedbackState === 'submitting') ? 0.5 : 1,
+                cursor: (!feedbackChoice || feedbackState === 'submitting') ? 'not-allowed' : 'pointer',
+              }}
+            >
+              {feedbackState === 'submitting' ? 'Sending…' : 'Submit feedback'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* "Start a new look?" confirm modal — mirrors fitsyou-web-app FittingRoomTab */}
+      {discardConfirmOpen && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 1000, background: 'rgba(22,22,22,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ width: '300px', background: C.surface, padding: '20px', boxSizing: 'border-box', borderRadius: '0' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+              <div style={{ fontSize: '13px', fontWeight: 700, color: C.ink }}>Start a new look?</div>
+              <button
+                onClick={() => setDiscardConfirmOpen(false)}
+                style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: '15px', color: C.muted, lineHeight: 1 }}
+              >
+                ✕
+              </button>
+            </div>
+            <div style={{ fontSize: '11px', color: C.muted, marginBottom: '14px', lineHeight: 1.5 }}>
+              Your current look hasn't been saved to My Looks yet.
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              {results.length > 0 && (
+                <button onClick={addThenContinue} disabled={saving} style={{ ...btnGhost, color: C.pinkDark, borderColor: C.pink, opacity: saving ? 0.7 : 1 }}>
+                  {saving ? 'Saving…' : '♡ Add to my looks, then continue'}
+                </button>
+              )}
+              <button onClick={discardResult} style={{ ...btnGhost, color: C.ink, borderColor: C.border }}>
+                ✕ Discard & clear Mirror
+              </button>
+              <button onClick={discardAndRegenerate} style={btnPink}>
+                ✦ Discard & generate new look
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Mirror */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
         {/* Header */}
@@ -696,7 +858,7 @@ function FittingRoom({
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             {(selected.length > 0 || results.length > 0) && (
               <button
-                onClick={clearCanvas}
+                onClick={handleHeaderClear}
                 style={{ background: 'none', border: 'none', padding: '0', cursor: 'pointer', fontFamily: MONO, fontSize: '10px', color: C.muted, textDecoration: 'underline' }}
               >
                 Clear
@@ -847,21 +1009,24 @@ function FittingRoom({
         </div>
       )}
 
-      {/* Action buttons */}
-      {phase !== 'generating' && (
-        <button
-          onClick={phase === 'done' ? clearCanvas : generate}
-          disabled={phase !== 'done' && selected.length === 0}
-          style={{
-            ...(phase === 'done' ? btnGhost : btnPink),
-            opacity: (phase !== 'done' && selected.length === 0) ? 0.4 : 1,
-            cursor: (phase !== 'done' && selected.length === 0) ? 'not-allowed' : 'pointer',
-            color: phase === 'done' ? C.ink : undefined,
-            borderColor: phase === 'done' ? C.border : undefined,
-          }}
-        >
-          {phase === 'done' ? '✕ Clear Mirror' : '✦ Generate the look'}
-        </button>
+      {/* Action buttons — mirrors fitsyou-web-app's post-result flow exactly:
+          Feedback, then Add to my looks / New Look. */}
+      {phase === 'done' && results.length > 0 && (
+        feedbackState === 'done' ? (
+          <div style={{
+            textAlign: 'center', fontFamily: MONO, fontSize: '10px', fontWeight: 700,
+            color: feedbackGiven === 'like' ? '#166534' : '#991b1b',
+          }}>
+            {feedbackGiven === 'like' ? '✓ Thanks!' : '✕ Thanks!'}
+          </div>
+        ) : (
+          <button
+            onClick={() => setFeedbackModalOpen(true)}
+            style={{ ...btnGhost, color: C.muted, borderColor: C.border }}
+          >
+            💬 Feedback
+          </button>
+        )
       )}
 
       {phase === 'done' && results.length > 0 && (
@@ -876,7 +1041,23 @@ function FittingRoom({
             cursor: saving ? 'default' : 'pointer',
           }}
         >
-          {saving ? 'Saving…' : '♡ Save to My Looks'}
+          {saving ? 'Saving…' : '♡ Add to my looks'}
+        </button>
+      )}
+
+      {phase !== 'generating' && (
+        <button
+          onClick={phase === 'done' ? () => setDiscardConfirmOpen(true) : generate}
+          disabled={phase !== 'done' && selected.length === 0}
+          style={{
+            ...(phase === 'done' ? btnGhost : btnPink),
+            opacity: (phase !== 'done' && selected.length === 0) ? 0.4 : 1,
+            cursor: (phase !== 'done' && selected.length === 0) ? 'not-allowed' : 'pointer',
+            color: phase === 'done' ? C.ink : undefined,
+            borderColor: phase === 'done' ? C.border : undefined,
+          }}
+        >
+          {phase === 'done' ? '✦ New Look' : '✦ Generate the look'}
         </button>
       )}
 
