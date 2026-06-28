@@ -408,9 +408,10 @@ function FittingRoom({
   const [phase, setPhase]       = useState<'idle' | 'generating' | 'done'>('idle');
   const [progress, setProgress] = useState(0);
   const [results, setResults]   = useState<string[]>([]);
-  const [saved, setSaved]       = useState(false);
+  const [saving, setSaving]     = useState(false);
   const [error, setError]       = useState('');
   const generatingRef  = useRef(false);
+  const savingRef      = useRef(false);
   const [canvasReady, setCanvasReady] = useState(false);
   const [photoConsentShown, setPhotoConsentShown] = useState(false);
   const [photoConsentPhotoAgreed, setPhotoConsentPhotoAgreed] = useState(false);
@@ -447,8 +448,9 @@ function FittingRoom({
 
   function clearCanvas() {
     generatingRef.current = false;
+    savingRef.current = false;
     setSelected([]); setPhase('idle'); setProgress(0);
-    setResults([]); setSaved(false); setError('');
+    setResults([]); setSaving(false); setError('');
     chrome.storage.local.remove('fitsyou_canvas');
   }
 
@@ -489,7 +491,7 @@ function FittingRoom({
       return;
     }
     setPhase('generating');
-    setProgress(0); setError(''); setResults([]); setSaved(false);
+    setProgress(0); setError(''); setResults([]); setSaving(false);
     generatingRef.current = true;
 
     const start = Date.now();
@@ -517,7 +519,13 @@ function FittingRoom({
   }
 
   async function saveToTryOns() {
-    if (results.length === 0) return;
+    // Guard against a double-click (or re-entry while the request is in flight):
+    // the button only reflects the saving/saved state after this await resolves,
+    // so without this ref a fast second click would POST the look a second time
+    // and create a duplicate row in My Looks.
+    if (results.length === 0 || savingRef.current) return;
+    savingRef.current = true;
+    setSaving(true);
     const tk = (await getToken()) ?? token;
     const outfitItems = selected.map((ref) => {
       if (ref.source === 'wishlist') {
@@ -548,8 +556,18 @@ function FittingRoom({
       store_name: firstWithUrl?.store ?? null,
       outfit_items: outfitItems,
     });
-    if (res.ok) { setSaved(true); chrome.storage.local.remove('fitsyou_canvas'); onTryOnSaved(); capture('tryon_saved'); }
-    else setError(res.error ?? 'Save failed');
+    if (res.ok) {
+      // Saved — clear the Mirror back to a clean slate (the look now lives in
+      // My Looks) and let the parent reload its lists + show the confirmation
+      // toast. clearCanvas() also resets savingRef/saving and wipes storage.
+      capture('tryon_saved');
+      clearCanvas();
+      onTryOnSaved();
+    } else {
+      setError(res.error ?? 'Save failed');
+      savingRef.current = false;
+      setSaving(false);
+    }
   }
 
   // Item card for the picker
@@ -848,16 +866,17 @@ function FittingRoom({
 
       {phase === 'done' && results.length > 0 && (
         <button
-          onClick={saved ? undefined : saveToTryOns}
-          disabled={saved}
+          onClick={saving ? undefined : saveToTryOns}
+          disabled={saving}
           style={{
             ...btnGhost,
-            color: saved ? '#166534' : C.pinkDark,
-            borderColor: saved ? '#166534' : C.pink,
-            opacity: saved ? 0.7 : 1,
+            color: C.pinkDark,
+            borderColor: C.pink,
+            opacity: saving ? 0.7 : 1,
+            cursor: saving ? 'default' : 'pointer',
           }}
         >
-          {saved ? '✓ Saved to My Looks' : '♡ Save to My Looks'}
+          {saving ? 'Saving…' : '♡ Save to My Looks'}
         </button>
       )}
 
@@ -1935,7 +1954,14 @@ function Popup() {
                   wishlist={wishlist}
                   wardrobe={wardrobe}
                   token={token}
-                  onTryOnSaved={() => setListsLoaded(false)}
+                  onTryOnSaved={() => {
+                    // Refetch in the background rather than setListsLoaded(false) —
+                    // that would flip every tab's `!listsLoaded` gate at once and
+                    // flash a full-panel spinner over the Fitting Room the user is
+                    // already looking at, for a save that only changed My Looks.
+                    if (token) void loadLists(token);
+                    showToast('Added to My Looks');
+                  }}
                 />
               )}
             </div>
