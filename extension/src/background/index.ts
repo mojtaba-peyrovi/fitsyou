@@ -36,7 +36,10 @@ chrome.runtime.onMessageExternal.addListener((message: AuthTokenMessage, sender,
       // straight back into the extension so there's no manual tab juggling.
       const tabId = sender.tab?.id;
       const windowId = sender.tab?.windowId;
-      if (windowId) chrome.sidePanel.open({ windowId });
+      if (windowId) {
+        chrome.sidePanel.open({ windowId });
+        setPanelOpen(windowId, true);
+      }
       if (tabId !== undefined) chrome.tabs.remove(tabId);
     });
     return true;
@@ -47,22 +50,65 @@ interface OpenPopupMessage {
   type: 'OPEN_POPUP';
 }
 
-type AnyMessage = IncomingMessage | OpenPopupMessage;
+interface TogglePanelMessage {
+  type: 'TOGGLE_PANEL';
+}
+
+interface SidepanelClosedMessage {
+  type: 'SIDEPANEL_CLOSED';
+  windowId: number;
+}
+
+type AnyMessage = IncomingMessage | OpenPopupMessage | TogglePanelMessage | SidepanelClosedMessage;
+
+// chrome.sidePanel has no close()/isOpen() API, so "is it open" is tracked
+// here ourselves (per window), kept in sync by the panel itself reporting
+// SIDEPANEL_CLOSED when it tears down (see popup/index.tsx's pagehide hook).
+// This must stay a plain synchronous in-memory check: chrome.sidePanel.open()
+// only succeeds when called directly within the click's user-gesture chain,
+// and awaiting anything (e.g. chrome.storage.session.get) before calling it
+// lets that gesture go stale, so open() silently no-ops.
+const openPanelWindows = new Set<number>();
+
+function isPanelOpen(windowId: number): boolean {
+  return openPanelWindows.has(windowId);
+}
+
+function setPanelOpen(windowId: number, open: boolean): void {
+  if (open) openPanelWindows.add(windowId); else openPanelWindows.delete(windowId);
+}
 
 // Open the side panel when the toolbar icon is clicked (no default_popup set).
 chrome.action.onClicked.addListener((tab) => {
   if (tab.windowId) {
     chrome.sidePanel.open({ windowId: tab.windowId });
+    setPanelOpen(tab.windowId, true);
   }
 });
 
 // PRODUCT_EXTRACTED is handled directly in the popup (see popup/index.tsx).
-// OPEN_POPUP is sent by the floating badge in the content script.
+// OPEN_POPUP (legacy) and TOGGLE_PANEL are sent by the floating badge in the
+// content script — TOGGLE_PANEL closes the panel on a second click by asking
+// the panel's own script to call window.close() on itself, since that's the
+// only way a side panel can close itself.
 chrome.runtime.onMessage.addListener((message: AnyMessage, sender, _sendResponse) => {
   if (message.type === 'OPEN_POPUP') {
     const windowId = sender.tab?.windowId;
     if (windowId) {
       chrome.sidePanel.open({ windowId });
+      setPanelOpen(windowId, true);
     }
+  } else if (message.type === 'TOGGLE_PANEL') {
+    const windowId = sender.tab?.windowId;
+    if (windowId === undefined) return;
+    if (isPanelOpen(windowId)) {
+      chrome.runtime.sendMessage({ type: 'CLOSE_SIDEPANEL', windowId });
+      setPanelOpen(windowId, false);
+    } else {
+      chrome.sidePanel.open({ windowId });
+      setPanelOpen(windowId, true);
+    }
+  } else if (message.type === 'SIDEPANEL_CLOSED') {
+    setPanelOpen(message.windowId, false);
   }
 });

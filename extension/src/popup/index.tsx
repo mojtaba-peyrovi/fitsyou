@@ -8,6 +8,27 @@ import {
 
 const API_BASE = 'https://fitsyou.live';
 
+// ─── Side panel lifecycle ─────────────────────────────────────────────────────
+// The background worker tracks open/closed state per window (chrome.sidePanel
+// has no close()/isOpen() API) so the page badge's second click can close the
+// panel. It stays in sync here: report SIDEPANEL_CLOSED whenever this page
+// tears down for any reason, and self-close when asked via CLOSE_SIDEPANEL
+// (the same window.close() the header's × button already uses).
+let currentWindowId: number | undefined;
+chrome.windows.getCurrent().then((w) => { currentWindowId = w.id; });
+
+chrome.runtime.onMessage.addListener((message: { type?: string; windowId?: number }) => {
+  if (message?.type === 'CLOSE_SIDEPANEL' && message.windowId === currentWindowId) {
+    window.close();
+  }
+});
+
+window.addEventListener('pagehide', () => {
+  if (currentWindowId !== undefined) {
+    chrome.runtime.sendMessage({ type: 'SIDEPANEL_CLOSED', windowId: currentWindowId }).catch(() => {});
+  }
+});
+
 // ─── Brand tokens — v3 "Soft Cool Stone" ─────────────────────────────────────
 const C = {
   pink:    '#FF2E88',

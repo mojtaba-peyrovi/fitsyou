@@ -14,7 +14,31 @@ function buildBadge(): HTMLElement {
 
   const style = document.createElement('style');
   style.textContent = `
+    .wrap {
+      position: relative;
+      width: 48px;
+      height: 48px;
+    }
+    .tail {
+      position: absolute;
+      top: 0;
+      right: 0;
+      width: 0;
+      height: 48px;
+      background: #121212;
+      box-shadow: -1px 0 6px rgba(0,0,0,0.28);
+      transition: width 0.15s ease;
+      z-index: 1;
+      pointer-events: none;
+    }
+    .wrap:hover .tail {
+      width: 8px;
+    }
     button {
+      position: absolute;
+      top: 0;
+      right: 0;
+      z-index: 2;
       display: flex;
       align-items: center;
       justify-content: center;
@@ -28,12 +52,12 @@ function buildBadge(): HTMLElement {
       box-shadow: -3px 0 16px rgba(0,0,0,0.40);
       transition: transform 0.15s ease, box-shadow 0.15s ease;
     }
-    button:hover {
-      transform: translateX(-5px);
+    .wrap:hover button {
+      transform: translateX(-8px);
       box-shadow: -5px 0 20px rgba(0,0,0,0.50);
     }
     button:active {
-      transform: translateX(-2px);
+      transform: translateX(-4px);
     }
     img {
       display: block;
@@ -44,8 +68,14 @@ function buildBadge(): HTMLElement {
     }
   `;
 
+  const wrap = document.createElement('div');
+  wrap.className = 'wrap';
+
+  const tail = document.createElement('div');
+  tail.className = 'tail';
+
   const btn = document.createElement('button');
-  btn.setAttribute('aria-label', 'Open fitsyou');
+  btn.setAttribute('aria-label', 'Open or close fitsyou');
   btn.title = 'fitsyou — try clothes on yourself';
 
   const img = document.createElement('img');
@@ -54,11 +84,13 @@ function buildBadge(): HTMLElement {
 
   btn.appendChild(img);
   btn.addEventListener('click', () => {
-    chrome.runtime.sendMessage({ type: 'OPEN_POPUP' });
+    chrome.runtime.sendMessage({ type: 'TOGGLE_PANEL' });
   });
 
+  wrap.appendChild(tail);
+  wrap.appendChild(btn);
   shadow.appendChild(style);
-  shadow.appendChild(btn);
+  shadow.appendChild(wrap);
   return host;
 }
 
