@@ -91,6 +91,13 @@ const SITE_SELECTORS: Record<string, string[]> = {
   ],
 };
 
+// Sites whose product gallery renders photos as CSS background-image on
+// non-<img> elements (e.g. Zalando Lounge's slider uses div[role="img"]) —
+// the <img>-based selectors and generic layers above can never match these.
+const SITE_BACKGROUND_SELECTORS: Record<string, string[]> = {
+  'zalando-lounge.de': ['[data-testid="media-slider"] div[role="img"]'],
+};
+
 // ── Size-chart selectors (tried first, per site) ─────────────────────────────
 // Size guides usually live in a modal that may or may not be in the DOM at
 // extraction time. We grab whatever is present; the backend tolerates misses.
@@ -307,7 +314,7 @@ interface ScoredImage {
  * Score a candidate image: higher = cleaner product shot, more suitable for
  * try-on (flat-lay, front/back on plain background). Lower = lifestyle hero.
  */
-function scoreProductShot(img: HTMLImageElement, src: string): number {
+function scoreProductShot(el: Element, src: string): number {
   let score = 0;
   const srcLower = src.toLowerCase();
 
@@ -324,21 +331,24 @@ function scoreProductShot(img: HTMLImageElement, src: string): number {
   }
 
   // Aspect ratio: square (~1:1) → flat-lay; portrait → product; landscape → banner/hero
-  const nw = img.naturalWidth;
-  const nh = img.naturalHeight;
-  if (nw > 0 && nh > 0) {
-    const ratio = nw / nh;
-    if (ratio >= 0.85 && ratio <= 1.15) score += 20; // square: often flat-lay
-    else if (ratio >= 0.55 && ratio < 0.85) score += 10; // portrait: typical product
-    else if (ratio > 1.3) score -= 20; // landscape: likely hero/banner
+  // Only applies to <img> — background-image elements have no natural size.
+  if (el instanceof HTMLImageElement) {
+    const nw = el.naturalWidth;
+    const nh = el.naturalHeight;
+    if (nw > 0 && nh > 0) {
+      const ratio = nw / nh;
+      if (ratio >= 0.85 && ratio <= 1.15) score += 20; // square: often flat-lay
+      else if (ratio >= 0.55 && ratio < 0.85) score += 10; // portrait: typical product
+      else if (ratio > 1.3) score -= 20; // landscape: likely hero/banner
+    }
   }
 
   // DOM context: thumbnail/gallery strips contain cleaner product angles
-  if (img.closest('[class*="thumb" i],[class*="gallery" i],[class*="carousel" i],[class*="swatch" i]')) {
+  if (el.closest('[class*="thumb" i],[class*="gallery" i],[class*="carousel" i],[class*="swatch" i]')) {
     score += 8;
   }
   // Hero/featured containers usually hold lifestyle shots
-  if (img.closest('[class*="hero" i],[class*="featured" i],[class*="main-image" i]')) {
+  if (el.closest('[class*="hero" i],[class*="featured" i],[class*="main-image" i]')) {
     score -= 10;
   }
 
@@ -426,9 +436,39 @@ function extractOgImage(): string | null {
   return el?.content && isValidProductUrl(el.content) ? el.content : null;
 }
 
+/** Reads the URL out of an inline `background-image: url(...)` style. */
+function extractBackgroundImageUrl(el: Element): string | null {
+  const bg = (el as HTMLElement).style.backgroundImage;
+  const match = bg && bg.match(/url\((['"]?)(.*?)\1\)/);
+  return match?.[2] || null;
+}
+
+function extractWithBackgroundSelectors(): string | null {
+  const hostname = location.hostname.replace(/^www\./, '');
+  const siteName = Object.keys(SITE_BACKGROUND_SELECTORS).find((k) => hostname.includes(k));
+  if (!siteName) return null;
+
+  const seen = new Set<string>();
+  const candidates: ScoredImage[] = [];
+
+  for (const selector of SITE_BACKGROUND_SELECTORS[siteName]) {
+    for (const el of Array.from(document.querySelectorAll(selector))) {
+      const src = extractBackgroundImageUrl(el);
+      if (!src || !isValidProductUrl(src) || seen.has(src)) continue;
+      const rect = el.getBoundingClientRect();
+      if (rect.width < 200 || rect.height < 200) continue;
+      seen.add(src);
+      candidates.push({ src, score: scoreProductShot(el, src) });
+    }
+  }
+
+  return bestScored(candidates);
+}
+
 function extractProductImage(): string | null {
   return (
     extractWithSiteSelectors() ??
+    extractWithBackgroundSelectors() ??
     extractWithGenericSelectors() ??
     extractBestScoredImage() ??
     extractOgImage()
@@ -519,6 +559,26 @@ function extractImageCandidates(primary: string): string[] {
   // Only widen to a full-page scan if the targeted net came up sparse.
   if (byPhoto.size < 3) {
     for (const img of Array.from(document.querySelectorAll<HTMLImageElement>('img'))) consider(img);
+  }
+
+  // Sites whose gallery is CSS background-image (not <img>) need their own pass.
+  const bgSiteName = Object.keys(SITE_BACKGROUND_SELECTORS).find((k) => hostname.includes(k));
+  if (bgSiteName) {
+    for (const sel of SITE_BACKGROUND_SELECTORS[bgSiteName]) {
+      for (const el of Array.from(document.querySelectorAll(sel))) {
+        const src = extractBackgroundImageUrl(el);
+        if (!src || !isValidProductUrl(src)) continue;
+        const key = photoIdentity(src);
+        const width = imageWidthHint(src);
+        const score = scoreProductShot(el, src);
+        const ex = byPhoto.get(key);
+        if (!ex) byPhoto.set(key, { src, width, score });
+        else {
+          if (width > ex.width) { ex.src = src; ex.width = width; }
+          ex.score = Math.max(ex.score, score);
+        }
+      }
+    }
   }
 
   const ranked = Array.from(byPhoto.values())

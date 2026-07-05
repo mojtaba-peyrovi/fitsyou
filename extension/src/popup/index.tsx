@@ -186,10 +186,12 @@ const GARMENT_FILTER_CATEGORIES: { value: GarmentCategory; label: string }[] = [
   { value: 'shoes', label: 'Shoes' },
 ];
 
-// Same 5 retailers as fitsyou-web-app's StoreLogo — keys match how the backend
-// normalizes store_name (hostname's second-level domain label).
+// Keys match how the backend normalizes store_name (hostname's second-level
+// domain label). Mirrors fitsyou-web-app's StoreLogo list, plus zalando-lounge
+// which is extension-only (paste-a-link can't support its login-gated pages).
 const FILTER_STORES: { key: string; label: string; domain: string }[] = [
   { key: 'zalando', label: 'Zalando', domain: 'zalando.com' },
+  { key: 'zalando-lounge', label: 'Zalando Lounge', domain: 'zalando-lounge.de' },
   { key: 'zara', label: 'Zara', domain: 'zara.com' },
   { key: 'hm', label: 'H&M', domain: 'hm.com' },
   { key: 'asos', label: 'ASOS', domain: 'asos.com' },
@@ -1519,7 +1521,7 @@ function Popup() {
 
   // ─── Render ───────────────────────────────────────────────────────────────
   return (
-    <div style={{ width: '360px', fontFamily: SANS, background: C.bone, color: C.ink, position: 'relative' }}>
+    <div style={{ width: '100%', fontFamily: SANS, background: C.bone, color: C.ink, position: 'relative' }}>
 
       {/* ── Try-on lightbox ── */}
       {lightbox && (
