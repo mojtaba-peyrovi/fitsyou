@@ -1636,7 +1636,7 @@ function Popup() {
           ) : (
             <div style={{ width: '22px', height: '22px', borderRadius: '50%', background: 'rgba(255,255,255,0.1)', flexShrink: 0 }} />
           )}
-          <div style={{ fontFamily: MONO, fontSize: '10px', color: C.muted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
+          <div style={{ fontFamily: MONO, fontSize: '11px', color: C.ash, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
             {userEmail}
           </div>
           <button
@@ -1645,10 +1645,10 @@ function Popup() {
             style={{ background: 'none', border: 'none', padding: '2px', cursor: 'pointer', color: C.muted, fontSize: '12px', lineHeight: 1, flexShrink: 0 }}
           >🍪</button>
           <div style={{
-            fontFamily: MONO, fontSize: '8px', letterSpacing: '0.08em', textTransform: 'uppercase',
+            fontFamily: MONO, fontSize: '9px', letterSpacing: '0.08em', textTransform: 'uppercase',
             padding: '2px 8px', borderRadius: '100px', flexShrink: 0,
             background: subscriptionTier === 'free' ? 'rgba(255,255,255,0.08)' : C.pink,
-            color: subscriptionTier === 'free' ? C.muted : C.surface,
+            color: subscriptionTier === 'free' ? C.ash : C.surface,
           }}>
             {subscriptionTier}
           </div>
