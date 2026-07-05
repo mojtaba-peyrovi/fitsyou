@@ -689,7 +689,17 @@ function FittingRoom({
           }}>✓</div>
         )}
         <div style={{ padding: '5px 6px 6px' }}>
-          {sub && <StoreTag name={sub} />}
+          {source === 'wishlist' ? (
+            (item as WishlistItem).product_url && (
+              <img
+                src={faviconUrl((item as WishlistItem).product_url)}
+                alt={sub ?? ''}
+                style={{ width: '14px', height: '14px', objectFit: 'contain', display: 'block', marginBottom: '2px' }}
+              />
+            )
+          ) : (
+            sub && <StoreTag name={sub} />
+          )}
           <div style={{ fontSize: '10px', fontWeight: 600, color: C.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: '1px' }}>
             {label ?? 'Item'}
           </div>
