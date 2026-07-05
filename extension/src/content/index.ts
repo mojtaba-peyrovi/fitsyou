@@ -630,6 +630,17 @@ function extractProductPrice(): string | null {
     if (text && text.length < 20 && priceLike.test(text)) return text;
   }
 
+  // Last resort for sites with fully obfuscated CSS-module class names (no
+  // "price" substring anywhere, e.g. Zalando Lounge) — scan every leaf-ish
+  // element for currency-shaped text, skipping struck-through "was" prices.
+  for (const el of document.querySelectorAll<HTMLElement>('body *')) {
+    if (el.children.length > 0) continue; // only leaf nodes, avoid matching whole containers
+    const style = getComputedStyle(el);
+    if (style.textDecorationLine.includes('line-through')) continue;
+    const text = el.textContent?.trim();
+    if (text && text.length < 20 && priceLike.test(text)) return text;
+  }
+
   return null;
 }
 
