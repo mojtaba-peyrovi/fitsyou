@@ -139,7 +139,7 @@ function faviconUrl(productUrl: string): string {
 }
 const SUPPORTED_RETAILER_DOMAINS = [
   'zara.com', 'asos.com', 'hm.com',
-  'zalando.com', 'zalando.de', 'zalando.co.uk', 'mango.com',
+  'zalando.com', 'zalando.de', 'zalando.co.uk', 'zalando-lounge.de', 'mango.com',
 ];
 function isRetailerUrl(url: string): boolean {
   try {

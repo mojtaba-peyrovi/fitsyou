@@ -11,6 +11,7 @@
     "*://*.zalando.com/*",
     "*://*.zalando.de/*",
     "*://*.zalando.co.uk/*",
+    "*://*.zalando-lounge.de/*",
     "*://*.mango.com/*"
   ],
   "icons": {
@@ -41,6 +42,7 @@
         "*://*.zalando.com/*",
         "*://*.zalando.de/*",
         "*://*.zalando.co.uk/*",
+        "*://*.zalando-lounge.de/*",
         "*://*.mango.com/*"
       ]
     }
@@ -54,6 +56,7 @@
         "*://*.zalando.com/*",
         "*://*.zalando.de/*",
         "*://*.zalando.co.uk/*",
+        "*://*.zalando-lounge.de/*",
         "*://*.mango.com/*"
       ],
       "js": ["badge.js"],
@@ -67,6 +70,7 @@
         "*://*.zalando.com/*",
         "*://*.zalando.de/*",
         "*://*.zalando.co.uk/*",
+        "*://*.zalando-lounge.de/*",
         "*://*.mango.com/*"
       ],
       "js": ["content.js"]

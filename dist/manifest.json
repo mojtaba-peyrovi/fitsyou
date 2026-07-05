@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "fitsyou",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "See how clothing looks on you before you buy.",
   "permissions": [
     "activeTab",
@@ -16,6 +16,7 @@
     "*://*.zalando.com/*",
     "*://*.zalando.de/*",
     "*://*.zalando.co.uk/*",
+    "*://*.zalando-lounge.de/*",
     "*://*.mango.com/*"
   ],
   "icons": {
@@ -48,6 +49,7 @@
         "*://*.zalando.com/*",
         "*://*.zalando.de/*",
         "*://*.zalando.co.uk/*",
+        "*://*.zalando-lounge.de/*",
         "*://*.mango.com/*"
       ]
     }
@@ -61,6 +63,7 @@
         "*://*.zalando.com/*",
         "*://*.zalando.de/*",
         "*://*.zalando.co.uk/*",
+        "*://*.zalando-lounge.de/*",
         "*://*.mango.com/*"
       ],
       "js": [
@@ -76,6 +79,7 @@
         "*://*.zalando.com/*",
         "*://*.zalando.de/*",
         "*://*.zalando.co.uk/*",
+        "*://*.zalando-lounge.de/*",
         "*://*.mango.com/*"
       ],
       "js": [
