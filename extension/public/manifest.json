@@ -3,7 +3,7 @@
   "name": "fitsyou",
   "version": "1.2.2",
   "description": "See how clothing looks on you before you buy.",
-  "permissions": ["activeTab", "storage", "scripting", "sidePanel"],
+  "permissions": ["activeTab", "storage", "sidePanel"],
   "host_permissions": [
     "*://*.zara.com/*",
     "*://*.asos.com/*",
