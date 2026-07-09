@@ -221,6 +221,12 @@ const FILTER_STORES: { key: string; label: string; domain: string }[] = [
 
 const R2_PREFIXES = ['wardrobe/', 'try-ons/', 'user-photos/', 'user-faces/', 'product-images/'];
 function authKeyFor(src: string): string | null {
+  // uploadToR2() now returns a bare object key (e.g. "user-faces/xxx.jpg")
+  // rather than a full public URL, and the API routes (profile, wishlist,
+  // ...) pass that straight through — so `src` is usually already a bare
+  // key here. Legacy rows written before that migration may still hold the
+  // old full-URL form, so that's checked too.
+  if (R2_PREFIXES.some((p) => src.startsWith(p))) return src;
   try {
     const key = new URL(src).pathname.replace(/^\//, '');
     return R2_PREFIXES.some((p) => key.startsWith(p)) ? key : null;
@@ -1239,6 +1245,12 @@ function Popup() {
   // Confirm dialog for poor-fit wishlist saves
   const [fitConfirm, setFitConfirm] = useState<{ ext: ExtractResult; tabUrl: string; tk: string; fitResult: FitResult } | null>(null);
 
+  // Confirm dialog for removing a wishlist / wardrobe / try-on item. Native
+  // window.confirm() closes the popup before the user can respond (Chrome
+  // tears the popup down on the focus loss to the dialog), so deletes go
+  // through this in-popup dialog instead — same pattern as fitConfirm above.
+  const [deleteConfirm, setDeleteConfirm] = useState<{ kind: 'wishlist' | 'wardrobe' | 'tryon'; id: string } | null>(null);
+
   // Back-to-top
   const tabScrollRef = useRef<HTMLDivElement>(null);
   const [showBackToTop, setShowBackToTop] = useState(false);
@@ -1310,6 +1322,19 @@ function Popup() {
     chrome.storage.onChanged.addListener(onChange);
     return () => chrome.storage.onChanged.removeListener(onChange);
   }, []);
+
+  // While "Complete setup" is showing, the user finishes onboarding in a
+  // separate tab (openTab()) rather than inside this panel. Chrome's side
+  // panel stays mounted and visible across tab switches in the same window,
+  // so there's no focus/visibility event to hook into re-checking the
+  // profile — poll instead, so the panel picks up the new photo_url and
+  // flips to the real dashboard on its own instead of being stuck showing
+  // "Complete setup" (and re-opening onboarding from step one) forever.
+  useEffect(() => {
+    if (status !== 'needs-setup') return;
+    const interval = setInterval(checkAuth, 4000);
+    return () => clearInterval(interval);
+  }, [status]);
 
   const panelOpenedRef = useRef(false);
   useEffect(() => {
@@ -1444,15 +1469,26 @@ function Popup() {
     setTab('wishlist');
   }
 
-  // ── Delete wishlist item ─────────────────────────────────────────────────
-  async function handleWishlistDelete(id: string, e: MouseEvent) {
-    e.stopPropagation();
-    if (!confirm('Remove this item from your wishlist?')) return;
+  // ── Delete wishlist / wardrobe / try-on item ─────────────────────────────
+  function requestDelete(kind: 'wishlist' | 'wardrobe' | 'tryon', id: string, e?: MouseEvent) {
+    e?.stopPropagation();
+    setDeleteConfirm({ kind, id });
+  }
+
+  async function performDelete() {
+    if (!deleteConfirm) return;
+    const { kind, id } = deleteConfirm;
+    setDeleteConfirm(null);
     const tk = (await getToken()) ?? token;
     if (!tk) return;
-    const res = await authedFetch(tk, `/api/wishlist/${id}`, { method: 'DELETE' });
+    const path = kind === 'wishlist' ? `/api/wishlist/${id}`
+      : kind === 'wardrobe' ? `/api/wardrobe/${id}`
+      : `/api/try-ons/${id}`;
+    const res = await authedFetch(tk, path, { method: 'DELETE' });
     if (res.ok) {
-      setWishlist((prev) => prev.filter((w) => w.id !== id));
+      if (kind === 'wishlist') setWishlist((prev) => prev.filter((w) => w.id !== id));
+      else if (kind === 'wardrobe') setWardrobe((prev) => prev.filter((w) => w.id !== id));
+      else setTryOns((prev) => prev.filter((t) => t.id !== id));
     } else {
       showToast('Could not remove item', 'error');
     }
@@ -1618,6 +1654,33 @@ function Popup() {
             <button
               style={{ ...btnGhost, marginTop: '8px' }}
               onClick={() => setFitConfirm(null)}
+            >Cancel</button>
+          </div>
+        </div>
+      )}
+
+      {/* ── Delete confirm dialog ── */}
+      {deleteConfirm && (
+        <div
+          style={{
+            position: 'fixed', inset: 0, zIndex: 1000,
+            background: 'rgba(22,22,22,0.92)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}
+        >
+          <div style={{ width: '300px', background: C.bone, padding: '20px', boxSizing: 'border-box' }}>
+            <div style={{ fontSize: '13px', fontWeight: 700, color: C.ink, marginBottom: '8px' }}>
+              Remove item?
+            </div>
+            <div style={{ fontSize: '12px', color: C.ink, opacity: 0.85, marginBottom: '16px', lineHeight: 1.5 }}>
+              {deleteConfirm.kind === 'wishlist' && 'Remove this item from your wishlist?'}
+              {deleteConfirm.kind === 'wardrobe' && 'Remove this item from your wardrobe?'}
+              {deleteConfirm.kind === 'tryon' && 'Remove this look from My Looks?'}
+            </div>
+            <button style={btnPink} onClick={performDelete}>Remove</button>
+            <button
+              style={{ ...btnGhost, marginTop: '8px' }}
+              onClick={() => setDeleteConfirm(null)}
             >Cancel</button>
           </div>
         </div>
@@ -1807,7 +1870,7 @@ function Popup() {
                 <div>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
                     {tryOns.slice(0, 8).map((item) => (
-                      <div key={item.id} style={{ background: C.surface, borderRadius: '0', border: `0.5px solid ${C.border}`, overflow: 'hidden' }}>
+                      <div key={item.id} style={{ background: C.surface, borderRadius: '0', border: `0.5px solid ${C.border}`, overflow: 'hidden', position: 'relative' }}>
                         {item.output_image_urls?.[0] ? (
                           <button
                             onClick={() => setLightbox({ src: item.output_image_urls[0], token })}
@@ -1827,6 +1890,18 @@ function Popup() {
                         ) : (
                           <div style={{ paddingBottom: '100%', background: C.bone }} />
                         )}
+                        <button
+                          onClick={(e) => requestDelete('tryon', item.id, e as unknown as MouseEvent)}
+                          title="Remove"
+                          style={{
+                            position: 'absolute', top: '4px', right: '4px', zIndex: 1,
+                            width: '22px', height: '22px', borderRadius: '50%',
+                            background: '#fff', color: C.ink, border: 'none',
+                            cursor: 'pointer', fontSize: '12px', lineHeight: 1,
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            boxShadow: '0 1px 4px rgba(22,22,22,0.25)',
+                          }}
+                        >✕</button>
                         {(() => {
                           const seen = new Set<string>();
                           const hosts = (item.outfit_items ?? [])
@@ -1985,7 +2060,7 @@ function Popup() {
                         )}
                       </div>
                       <button
-                        onClick={(e) => handleWishlistDelete(item.id, e as unknown as MouseEvent)}
+                        onClick={(e) => requestDelete('wishlist', item.id, e as unknown as MouseEvent)}
                         title="Remove"
                         style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.faint, fontSize: '14px', lineHeight: 1, padding: '4px', flexShrink: 0, alignSelf: 'flex-start' }}
                       >✕</button>
@@ -2136,10 +2211,24 @@ function Popup() {
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
                           {displayWardrobe.map((item) => (
                             <div key={item.id} style={{ background: C.surface, borderRadius: '0', border: `0.5px solid ${C.border}`, overflow: 'hidden' }}>
-                              <AuthImg
-                                src={item.image_url} token={token} alt={item.name ?? 'Item'}
-                                style={{ width: '100%', height: '110px', objectFit: 'contain', background: C.bone, display: 'block' }}
-                              />
+                              <div style={{ position: 'relative' }}>
+                                <AuthImg
+                                  src={item.image_url} token={token} alt={item.name ?? 'Item'}
+                                  style={{ width: '100%', height: '110px', objectFit: 'contain', background: C.bone, display: 'block' }}
+                                />
+                                <button
+                                  onClick={(e) => requestDelete('wardrobe', item.id, e as unknown as MouseEvent)}
+                                  title="Remove"
+                                  style={{
+                                    position: 'absolute', top: '4px', right: '4px',
+                                    width: '22px', height: '22px', borderRadius: '50%',
+                                    background: '#fff', color: C.ink, border: 'none',
+                                    cursor: 'pointer', fontSize: '12px', lineHeight: 1,
+                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                    boxShadow: '0 1px 4px rgba(22,22,22,0.25)',
+                                  }}
+                                >✕</button>
+                              </div>
                               <div style={{ padding: '6px 8px 8px' }}>
                                 {item.category && <StoreTag name={item.category} />}
                                 <div style={{ fontSize: '11px', fontWeight: 600, color: C.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: '2px' }}>
